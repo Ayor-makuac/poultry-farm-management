@@ -10,10 +10,66 @@ const { connectDB } = require('./config/database');
 
 const app = express();
 
-// Middleware
+// CORS Configuration
+// Normalize origin by removing trailing slashes for comparison
+const normalizeOrigin = (origin) => {
+  if (!origin) return origin;
+  return origin.replace(/\/+$/, ''); // Remove trailing slashes
+};
+
+// Allowed origins - support multiple origins in production
+const getAllowedOrigins = () => {
+  const origins = [];
+  
+  // Add CLIENT_URL if set
+  if (process.env.CLIENT_URL) {
+    origins.push(process.env.CLIENT_URL);
+    // Also add without trailing slash if it has one
+    origins.push(normalizeOrigin(process.env.CLIENT_URL));
+  }
+  
+  // Add localhost for development
+  if (process.env.NODE_ENV !== 'production') {
+    origins.push('http://localhost:3000');
+    origins.push('http://localhost:3001');
+  }
+  
+  return origins;
+};
+
+// CORS middleware with dynamic origin checking
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
-  credentials: true
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) {
+      return callback(null, true);
+    }
+    
+    const normalizedOrigin = normalizeOrigin(origin);
+    const allowedOrigins = getAllowedOrigins();
+    
+    // Check if origin (normalized) is in allowed list
+    const isAllowed = allowedOrigins.some(allowed => 
+      normalizeOrigin(allowed) === normalizedOrigin
+    );
+    
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      // In development, be more permissive
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`⚠️  CORS: Allowing origin ${origin} (development mode)`);
+        callback(null, true);
+      } else {
+        console.error(`❌ CORS: Blocked origin ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Authorization']
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
