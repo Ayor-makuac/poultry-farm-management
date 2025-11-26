@@ -1,0 +1,37 @@
+.reports-container {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.reports-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.reports-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+}
+
+.chart-card {
+  padding: 20px;
+}
+
+.chart-card .card-body {
+  padding: 20px 0;
+  min-height: 300px;
+}
+
+@media (max-width: 768px) {
+  .reports-charts {
+    grid-template-columns: 1fr;
+  }
+  
+  .reports-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
