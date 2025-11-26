@@ -4,7 +4,11 @@
  */
 
 const { connectDB, mongoose } = require('../config/database');
-require('dotenv').config();
+const path = require('path');
+
+// Ensure .env is loaded from backend directory
+const envPath = path.resolve(__dirname, '..', '.env');
+require('dotenv').config({ path: envPath });
 
 const testConnection = async () => {
   try {

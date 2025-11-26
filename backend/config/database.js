@@ -1,17 +1,28 @@
 const mongoose = require('mongoose');
-require('dotenv').config();
+const path = require('path');
+
+// Load .env file from backend directory (works from any script location)
+const envPath = path.resolve(__dirname, '..', '.env');
+require('dotenv').config({ path: envPath });
 
 mongoose.set('strictQuery', false);
 
 const buildMongoUri = () => {
+  // Debug: Show what MONGO_URI is being used (hide credentials)
   if (process.env.MONGO_URI) {
+    const maskedUri = process.env.MONGO_URI.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+    console.log(`🔗 Using MONGO_URI from environment: ${maskedUri}`);
     return process.env.MONGO_URI;
   }
 
+  // Fallback to individual components
+  console.log('⚠️  MONGO_URI not found, using individual components...');
   const host = process.env.MONGO_HOST || '127.0.0.1';
   const port = process.env.MONGO_PORT || '27017';
   const db = process.env.MONGO_DB || 'poultry_farm';
-  return `mongodb://${host}:${port}/${db}`;
+  const fallbackUri = `mongodb://${host}:${port}/${db}`;
+  console.log(`🔗 Using fallback URI: ${fallbackUri}`);
+  return fallbackUri;
 };
 
 const connectDB = async () => {

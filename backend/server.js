@@ -1,6 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+
+// Load .env from backend directory
+const envPath = path.resolve(__dirname, '.env');
+require('dotenv').config({ path: envPath });
+
 const { connectDB } = require('./config/database');
 
 const app = express();
