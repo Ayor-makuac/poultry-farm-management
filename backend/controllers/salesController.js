@@ -1,5 +1,4 @@
-const { SalesRecord, User } = require('../models');
-const { Op } = require('sequelize');
+const { SalesRecord } = require('../models');
 
 /**
  * @desc    Create sales record
@@ -30,11 +29,8 @@ const createSalesRecord = async (req, res) => {
       recorded_by: req.user.user_id
     });
 
-    const record = await SalesRecord.findByPk(salesRecord.sale_id, {
-      include: [
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    const record = await SalesRecord.findById(salesRecord._id)
+      .populate('recorded_by', 'name role');
 
     res.status(201).json({
       success: true,
@@ -60,25 +56,18 @@ const getSalesRecords = async (req, res) => {
   try {
     const { product_type, start_date, end_date, customer_name } = req.query;
 
-    // Build filter
-    const where = {};
-    if (product_type) where.product_type = product_type;
-    if (customer_name) where.customer_name = { [Op.like]: `%${customer_name}%` };
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
-    } else if (start_date) {
-      where.date = { [Op.gte]: start_date };
-    } else if (end_date) {
-      where.date = { [Op.lte]: end_date };
+    const filter = {};
+    if (product_type) filter.product_type = product_type;
+    if (customer_name) filter.customer_name = { $regex: customer_name, $options: 'i' };
+    if (start_date || end_date) {
+      filter.date = {};
+      if (start_date) filter.date.$gte = new Date(start_date);
+      if (end_date) filter.date.$lte = new Date(end_date);
     }
 
-    const salesRecords = await SalesRecord.findAll({
-      where,
-      include: [
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['date', 'DESC']]
-    });
+    const salesRecords = await SalesRecord.find(filter)
+      .populate('recorded_by', 'name role')
+      .sort({ date: -1 });
 
     res.status(200).json({
       success: true,
@@ -104,31 +93,42 @@ const getSalesStats = async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
 
-    const where = {};
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
+    const match = {};
+    if (start_date || end_date) {
+      match.date = {};
+      if (start_date) match.date.$gte = new Date(start_date);
+      if (end_date) match.date.$lte = new Date(end_date);
     }
 
-    const totalRevenue = await SalesRecord.sum('total_amount', { where });
-    const totalSales = await SalesRecord.count({ where });
+    const [summary] = await SalesRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$total_amount' },
+          totalSales: { $sum: 1 }
+        }
+      }
+    ]);
 
-    // Sales by product type
-    const salesByProduct = await SalesRecord.findAll({
-      where,
-      attributes: [
-        'product_type',
-        [SalesRecord.sequelize.fn('COUNT', SalesRecord.sequelize.col('sale_id')), 'count'],
-        [SalesRecord.sequelize.fn('SUM', SalesRecord.sequelize.col('quantity')), 'total_quantity'],
-        [SalesRecord.sequelize.fn('SUM', SalesRecord.sequelize.col('total_amount')), 'total_revenue']
-      ],
-      group: ['product_type']
-    });
+    const salesByProduct = await SalesRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$product_type',
+          count: { $sum: 1 },
+          total_quantity: { $sum: '$quantity' },
+          total_revenue: { $sum: '$total_amount' }
+        }
+      },
+      { $project: { product_type: '$_id', count: 1, total_quantity: 1, total_revenue: 1, _id: 0 } }
+    ]);
 
     res.status(200).json({
       success: true,
       data: {
-        totalRevenue: totalRevenue || 0,
-        totalSales,
+        totalRevenue: summary?.totalRevenue || 0,
+        totalSales: summary?.totalSales || 0,
         salesByProduct
       }
     });
@@ -151,7 +151,7 @@ const updateSalesRecord = async (req, res) => {
   try {
     const { product_type, quantity, unit_price, total_amount, customer_name, customer_phone, date, notes } = req.body;
 
-    const salesRecord = await SalesRecord.findByPk(req.params.id);
+    const salesRecord = await SalesRecord.findById(req.params.id);
 
     if (!salesRecord) {
       return res.status(404).json({
@@ -160,22 +160,19 @@ const updateSalesRecord = async (req, res) => {
       });
     }
 
-    await salesRecord.update({
-      product_type: product_type || salesRecord.product_type,
-      quantity: quantity !== undefined ? quantity : salesRecord.quantity,
-      unit_price: unit_price !== undefined ? unit_price : salesRecord.unit_price,
-      total_amount: total_amount !== undefined ? total_amount : salesRecord.total_amount,
-      customer_name: customer_name || salesRecord.customer_name,
-      customer_phone: customer_phone || salesRecord.customer_phone,
-      date: date || salesRecord.date,
-      notes: notes !== undefined ? notes : salesRecord.notes
-    });
+    salesRecord.product_type = product_type || salesRecord.product_type;
+    salesRecord.quantity = quantity ?? salesRecord.quantity;
+    salesRecord.unit_price = unit_price ?? salesRecord.unit_price;
+    salesRecord.total_amount = total_amount ?? salesRecord.total_amount;
+    salesRecord.customer_name = customer_name || salesRecord.customer_name;
+    salesRecord.customer_phone = customer_phone || salesRecord.customer_phone;
+    salesRecord.date = date || salesRecord.date;
+    salesRecord.notes = notes ?? salesRecord.notes;
 
-    const updatedRecord = await SalesRecord.findByPk(salesRecord.sale_id, {
-      include: [
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    await salesRecord.save();
+
+    const updatedRecord = await SalesRecord.findById(salesRecord._id)
+      .populate('recorded_by', 'name role');
 
     res.status(200).json({
       success: true,
@@ -199,7 +196,7 @@ const updateSalesRecord = async (req, res) => {
  */
 const deleteSalesRecord = async (req, res) => {
   try {
-    const salesRecord = await SalesRecord.findByPk(req.params.id);
+    const salesRecord = await SalesRecord.findById(req.params.id);
 
     if (!salesRecord) {
       return res.status(404).json({
@@ -208,7 +205,7 @@ const deleteSalesRecord = async (req, res) => {
       });
     }
 
-    await salesRecord.destroy();
+    await salesRecord.deleteOne();
 
     res.status(200).json({
       success: true,

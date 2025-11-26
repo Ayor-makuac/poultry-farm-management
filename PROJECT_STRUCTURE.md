@@ -12,9 +12,9 @@ Poultry Farm/
 │
 ├── 📁 backend/                                # Backend API (Node.js/Express)
 │   ├── 📁 config/
-│   │   └── database.js                        # Sequelize database configuration
+│   │   └── database.js                        # Mongoose database configuration
 │   │
-│   ├── 📁 models/                             # Database models (Sequelize)
+│   ├── 📁 models/                             # Database models (Mongoose)
 │   │   ├── User.js                            # User model (Admin/Manager/Worker/Vet)
 │   │   ├── PoultryBatch.js                    # Poultry flock batches
 │   │   ├── FeedRecord.js                      # Daily feeding records
@@ -167,8 +167,8 @@ Poultry Farm/
 ### Backend (Phase 1 - ✅ Complete)
 - **Runtime:** Node.js
 - **Framework:** Express.js
-- **Database:** MySQL
-- **ORM:** Sequelize
+- **Database:** MongoDB
+- **ODM:** Mongoose
 - **Authentication:** JWT (jsonwebtoken)
 - **Security:** bcrypt (password hashing)
 - **CORS:** cors middleware
@@ -345,7 +345,7 @@ Poultry Farm/
 - ✅ Password hashing (bcrypt)
 - ✅ JWT token authentication
 - ✅ Environment variable protection
-- ✅ SQL injection prevention (Sequelize ORM)
+- ✅ Query sanitization through Mongoose
 - ✅ CORS configuration
 - 📋 Role-based access control (Phase 2)
 - 📋 Input validation (Phase 2)

@@ -40,8 +40,8 @@ The Poultry Farm Management System is a modern web application designed to autom
 ### Backend
 - **Runtime:** Node.js
 - **Framework:** Express.js
-- **Database:** MySQL
-- **ORM:** Sequelize
+- **Database:** MongoDB (Atlas or self-hosted)
+- **ODM:** Mongoose
 - **Authentication:** JWT (jsonwebtoken)
 - **Security:** bcrypt
 - **CORS:** cors middleware
@@ -59,8 +59,8 @@ The Poultry Farm Management System is a modern web application designed to autom
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js (v14 or higher)
-- MySQL (v5.7 or higher)
+- Node.js (v18 or higher)
+- MongoDB (local instance or a hosted cluster such as MongoDB Atlas)
 - npm or yarn
 
 ### Installation
@@ -77,24 +77,31 @@ npm install
 ```
 
 **3. Configure Environment**
-Edit `backend/.env`:
+Create `backend/.env`:
 ```env
-DB_PASSWORD=your_mysql_password
+MONGO_URI=mongodb://localhost:27017/poultry_farm
 JWT_SECRET=your_secure_random_string
+CLIENT_URL=http://localhost:3000
 ```
 
-**4. Create Database**
-```bash
-npm run setup
-```
+> ℹ️ When using MongoDB Atlas, replace `MONGO_URI` with the connection string provided by Atlas.
 
-**5. Start Backend Server**
+**4. Start Backend Server**
 ```bash
 npm run dev
 ```
 Backend will run on `http://localhost:5000`
 
-**6. Frontend Setup** (New terminal)
+> 🌱 **Auto-Seeding**: On first startup, the system automatically creates default users for each role:
+> - **Admin**: admin@poultryfarm.com / admin123
+> - **Manager**: manager@poultryfarm.com / manager123
+> - **Worker**: worker@poultryfarm.com / worker123
+> - **Veterinarian**: vet@poultryfarm.com / vet123
+>
+> To manually seed users: `npm run seed`  
+> To disable auto-seeding: Set `AUTO_SEED=false` in `.env`
+
+**5. Frontend Setup** (New terminal)
 ```bash
 cd frontend
 npm install
@@ -193,7 +200,7 @@ Frontend will run on `http://localhost:3000`
 Poultry Farm/
 ├── backend/
 │   ├── config/              # Database configuration
-│   ├── models/              # Sequelize models (9)
+│   ├── models/              # Mongoose models (9 collections)
 │   ├── controllers/         # Request handlers (11)
 │   ├── routes/              # API routes (11)
 │   ├── middleware/          # Auth & validation (3)
@@ -229,7 +236,7 @@ Poultry Farm/
 - Role-based access control
 - Protected API routes
 - Input validation
-- SQL injection prevention (Sequelize ORM)
+- Query sanitization through Mongoose
 - CORS configuration
 - Automatic token expiration handling
 
@@ -327,7 +334,7 @@ This project demonstrates proficiency in:
 - **Total Files:** 80+
 - **Lines of Code:** ~8,000+
 - **API Endpoints:** 50+
-- **Database Tables:** 9
+- **Database Collections:** 9
 - **Frontend Components:** 10+
 - **Documentation Pages:** 8
 

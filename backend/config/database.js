@@ -1,36 +1,37 @@
-const { Sequelize } = require('sequelize');
+const mongoose = require('mongoose');
 require('dotenv').config();
 
-const sequelize = new Sequelize(
-  process.env.DB_NAME,
-  process.env.DB_USER,
-  process.env.DB_PASSWORD,
-  {
-    host: process.env.DB_HOST,
-    dialect: process.env.DB_DIALECT,
-    logging: false,
-    pool: {
-      max: 5,
-      min: 0,
-      acquire: 30000,
-      idle: 10000
-    }
+mongoose.set('strictQuery', false);
+
+const buildMongoUri = () => {
+  if (process.env.MONGO_URI) {
+    return process.env.MONGO_URI;
   }
-);
+
+  const host = process.env.MONGO_HOST || '127.0.0.1';
+  const port = process.env.MONGO_PORT || '27017';
+  const db = process.env.MONGO_DB || 'poultry_farm';
+  return `mongodb://${host}:${port}/${db}`;
+};
 
 const connectDB = async () => {
+  const mongoUri = buildMongoUri();
+
   try {
-    await sequelize.authenticate();
-    console.log('✅ Database connected successfully');
-    
-    // Sync all models
-    await sequelize.sync({ alter: false });
-    console.log('✅ Database models synchronized');
+    await mongoose.connect(mongoUri, {
+      user: process.env.MONGO_USER || undefined,
+      pass: process.env.MONGO_PASSWORD || undefined,
+      dbName: process.env.MONGO_DB || undefined,
+      autoIndex: true
+    });
+
+    console.log('✅ MongoDB connected successfully');
+    console.log(`📦 Database: ${mongoose.connection.name}`);
   } catch (error) {
-    console.error('❌ Unable to connect to the database:', error.message);
+    console.error('❌ Unable to connect to MongoDB:', error.message);
     process.exit(1);
   }
 };
 
-module.exports = { sequelize, connectDB };
+module.exports = { connectDB, mongoose };
 

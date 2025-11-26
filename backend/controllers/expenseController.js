@@ -1,5 +1,4 @@
-const { Expense, User } = require('../models');
-const { Op } = require('sequelize');
+const { Expense } = require('../models');
 
 /**
  * @desc    Create expense record
@@ -27,11 +26,7 @@ const createExpense = async (req, res) => {
       recorded_by: req.user.user_id
     });
 
-    const record = await Expense.findByPk(expense.expense_id, {
-      include: [
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    const record = await Expense.findById(expense._id).populate('recorded_by', 'name role');
 
     res.status(201).json({
       success: true,
@@ -57,24 +52,17 @@ const getExpenses = async (req, res) => {
   try {
     const { category, start_date, end_date } = req.query;
 
-    // Build filter
-    const where = {};
-    if (category) where.category = category;
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
-    } else if (start_date) {
-      where.date = { [Op.gte]: start_date };
-    } else if (end_date) {
-      where.date = { [Op.lte]: end_date };
+    const filter = {};
+    if (category) filter.category = category;
+    if (start_date || end_date) {
+      filter.date = {};
+      if (start_date) filter.date.$gte = new Date(start_date);
+      if (end_date) filter.date.$lte = new Date(end_date);
     }
 
-    const expenses = await Expense.findAll({
-      where,
-      include: [
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['date', 'DESC']]
-    });
+    const expenses = await Expense.find(filter)
+      .populate('recorded_by', 'name role')
+      .sort({ date: -1 });
 
     res.status(200).json({
       success: true,
@@ -100,30 +88,41 @@ const getExpenseStats = async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
 
-    const where = {};
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
+    const match = {};
+    if (start_date || end_date) {
+      match.date = {};
+      if (start_date) match.date.$gte = new Date(start_date);
+      if (end_date) match.date.$lte = new Date(end_date);
     }
 
-    const totalExpenses = await Expense.sum('amount', { where });
-    const expenseCount = await Expense.count({ where });
+    const [summary] = await Expense.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalExpenses: { $sum: '$amount' },
+          expenseCount: { $sum: 1 }
+        }
+      }
+    ]);
 
-    // Expenses by category
-    const expensesByCategory = await Expense.findAll({
-      where,
-      attributes: [
-        'category',
-        [Expense.sequelize.fn('COUNT', Expense.sequelize.col('expense_id')), 'count'],
-        [Expense.sequelize.fn('SUM', Expense.sequelize.col('amount')), 'total_amount']
-      ],
-      group: ['category']
-    });
+    const expensesByCategory = await Expense.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 },
+          total_amount: { $sum: '$amount' }
+        }
+      },
+      { $project: { category: '$_id', count: 1, total_amount: 1, _id: 0 } }
+    ]);
 
     res.status(200).json({
       success: true,
       data: {
-        totalExpenses: totalExpenses || 0,
-        expenseCount,
+        totalExpenses: summary?.totalExpenses || 0,
+        expenseCount: summary?.expenseCount || 0,
         expensesByCategory
       }
     });
@@ -146,7 +145,7 @@ const updateExpense = async (req, res) => {
   try {
     const { category, description, amount, date, notes } = req.body;
 
-    const expense = await Expense.findByPk(req.params.id);
+    const expense = await Expense.findById(req.params.id);
 
     if (!expense) {
       return res.status(404).json({
@@ -155,19 +154,15 @@ const updateExpense = async (req, res) => {
       });
     }
 
-    await expense.update({
-      category: category || expense.category,
-      description: description || expense.description,
-      amount: amount !== undefined ? amount : expense.amount,
-      date: date || expense.date,
-      notes: notes !== undefined ? notes : expense.notes
-    });
+    expense.category = category || expense.category;
+    expense.description = description || expense.description;
+    expense.amount = amount ?? expense.amount;
+    expense.date = date || expense.date;
+    expense.notes = notes ?? expense.notes;
 
-    const updatedRecord = await Expense.findByPk(expense.expense_id, {
-      include: [
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    await expense.save();
+
+    const updatedRecord = await Expense.findById(expense._id).populate('recorded_by', 'name role');
 
     res.status(200).json({
       success: true,
@@ -191,7 +186,7 @@ const updateExpense = async (req, res) => {
  */
 const deleteExpense = async (req, res) => {
   try {
-    const expense = await Expense.findByPk(req.params.id);
+    const expense = await Expense.findById(req.params.id);
 
     if (!expense) {
       return res.status(404).json({
@@ -200,7 +195,7 @@ const deleteExpense = async (req, res) => {
       });
     }
 
-    await expense.destroy();
+    await expense.deleteOne();
 
     res.status(200).json({
       success: true,

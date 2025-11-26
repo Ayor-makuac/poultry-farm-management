@@ -1,11 +1,11 @@
 # Poultry Farm Management System - Backend API
 
 ## Overview
-This is the backend API for the Poultry Farm Management System built with Node.js, Express, and MySQL.
+This is the backend API for the Poultry Farm Management System built with Node.js, Express, and MongoDB.
 
 ## Prerequisites
-- Node.js (v14 or higher)
-- MySQL (v5.7 or higher)
+- Node.js (v18 or higher)
+- MongoDB (local server or hosted cluster such as MongoDB Atlas)
 - npm or yarn
 
 ## Installation
@@ -15,21 +15,18 @@ This is the backend API for the Poultry Farm Management System built with Node.j
 npm install
 ```
 
-2. Configure environment variables:
-   - Copy `.env` file and update with your MySQL credentials
-   - Update `DB_PASSWORD` with your MySQL root password
-   - Update `JWT_SECRET` with a secure random string
+2. Configure environment variables inside `backend/.env`:
+```env
+MONGO_URI=mongodb://localhost:27017/poultry_farm
+JWT_SECRET=your_secure_random_string
+CLIENT_URL=http://localhost:3000
+```
 
-3. Create the database:
+> When deploying, replace `MONGO_URI` with your hosted Mongo connection string.
+
+3. (Optional) Run the connectivity check:
 ```bash
-# Login to MySQL
-mysql -u root -p
-
-# Run the initialization script
-source scripts/init_database.sql
-
-# Or manually create database
-CREATE DATABASE poultry_farm_db;
+npm run setup
 ```
 
 4. Start the server:
@@ -109,8 +106,8 @@ The server will run on `http://localhost:5000`
 
 ## Technologies Used
 - **Express.js** - Web framework
-- **Sequelize** - ORM for MySQL
-- **MySQL2** - MySQL driver
+- **Mongoose** - ODM for MongoDB
+- **MongoDB** - Document database
 - **bcrypt** - Password hashing
 - **jsonwebtoken** - JWT authentication
 - **cors** - Cross-origin resource sharing
@@ -120,7 +117,7 @@ The server will run on `http://localhost:5000`
 ```
 backend/
 ├── config/          # Database configuration
-├── models/          # Sequelize models
+├── models/          # Mongoose models
 ├── controllers/     # Request handlers
 ├── routes/          # API routes
 ├── middleware/      # Custom middleware

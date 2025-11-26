@@ -7,10 +7,7 @@ const { User } = require('../models');
  */
 const getUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] },
-      order: [['created_at', 'DESC']]
-    });
+    const users = await User.find().select('-password').sort({ created_at: -1 });
 
     res.status(200).json({
       success: true,
@@ -34,9 +31,7 @@ const getUsers = async (req, res) => {
  */
 const getUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id, {
-      attributes: { exclude: ['password'] }
-    });
+    const user = await User.findById(req.params.id).select('-password');
 
     if (!user) {
       return res.status(404).json({
@@ -68,7 +63,7 @@ const updateUser = async (req, res) => {
   try {
     const { name, email, phone, role, password } = req.body;
 
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res.status(404).json({
@@ -95,7 +90,7 @@ const updateUser = async (req, res) => {
 
     // Check email uniqueness if email is being changed
     if (email && email !== user.email) {
-      const emailExists = await User.findOne({ where: { email } });
+      const emailExists = await User.findOne({ email, _id: { $ne: user._id } });
       if (emailExists) {
         return res.status(400).json({
           success: false,
@@ -113,11 +108,10 @@ const updateUser = async (req, res) => {
     if (password) updateData.password = password; // Will be hashed by model hook
 
     // Update user
-    await user.update(updateData);
+    Object.assign(user, updateData);
+    await user.save();
 
-    const updatedUser = await User.findByPk(user.user_id, {
-      attributes: { exclude: ['password'] }
-    });
+    const updatedUser = await User.findById(user._id).select('-password');
 
     res.status(200).json({
       success: true,
@@ -127,12 +121,10 @@ const updateUser = async (req, res) => {
   } catch (error) {
     console.error('Update user error:', error);
     
-    // Handle Sequelize validation errors
-    if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+    if (error.name === 'ValidationError' || error.code === 11000) {
       return res.status(400).json({
         success: false,
-        message: error.errors?.[0]?.message || 'Validation error',
-        error: error.message
+        message: error.message || 'Validation error'
       });
     }
     
@@ -151,7 +143,7 @@ const updateUser = async (req, res) => {
  */
 const deleteUser = async (req, res) => {
   try {
-    const user = await User.findByPk(req.params.id);
+    const user = await User.findById(req.params.id);
 
     if (!user) {
       return res.status(404).json({
@@ -160,7 +152,7 @@ const deleteUser = async (req, res) => {
       });
     }
 
-    await user.destroy();
+    await user.deleteOne();
 
     res.status(200).json({
       success: true,

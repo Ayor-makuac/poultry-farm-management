@@ -1,13 +1,26 @@
-const { 
-  ProductionRecord, 
-  SalesRecord, 
-  Expense, 
-  PoultryBatch, 
+const {
+  ProductionRecord,
+  SalesRecord,
+  Expense,
+  PoultryBatch,
   FeedRecord,
   HealthRecord,
-  Inventory 
+  Inventory
 } = require('../models');
-const { Op } = require('sequelize');
+const { mongoose } = require('../config/database');
+
+const buildDateMatch = (start, end) => {
+  if (!start && !end) return {};
+  const match = {};
+  if (start) match.$gte = new Date(start);
+  if (end) match.$lte = new Date(end);
+  return match;
+};
+
+const toObjectId = (value) => {
+  if (!value || !mongoose.Types.ObjectId.isValid(value)) return null;
+  return new mongoose.Types.ObjectId(value);
+};
 
 /**
  * @desc    Get production report
@@ -17,40 +30,54 @@ const { Op } = require('sequelize');
 const getProductionReport = async (req, res) => {
   try {
     const { start_date, end_date, batch_id } = req.query;
+    const match = {};
 
-    const where = {};
-    if (batch_id) where.batch_id = batch_id;
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
-    }
+    const batchObjectId = toObjectId(batch_id);
+    if (batchObjectId) match.batch_id = batchObjectId;
 
-    const totalEggs = await ProductionRecord.sum('eggs_collected', { where });
-    const totalMortality = await ProductionRecord.sum('mortality_count', { where });
-    const recordCount = await ProductionRecord.count({ where });
-    const avgEggsPerDay = recordCount > 0 ? (totalEggs / recordCount).toFixed(2) : 0;
+    const dateMatch = buildDateMatch(start_date, end_date);
+    if (Object.keys(dateMatch).length) match.date = dateMatch;
 
-    // Production trend (daily)
-    const productionTrend = await ProductionRecord.findAll({
-      where,
-      attributes: [
-        'date',
-        [ProductionRecord.sequelize.fn('SUM', ProductionRecord.sequelize.col('eggs_collected')), 'total_eggs'],
-        [ProductionRecord.sequelize.fn('SUM', ProductionRecord.sequelize.col('mortality_count')), 'total_mortality']
-      ],
-      group: ['date'],
-      order: [['date', 'ASC']]
-    });
+    const [summary] = await ProductionRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalEggs: { $sum: '$eggs_collected' },
+          totalMortality: { $sum: '$mortality_count' },
+          recordCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const trend = await ProductionRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$date',
+          total_eggs: { $sum: '$eggs_collected' },
+          total_mortality: { $sum: '$mortality_count' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
 
     res.status(200).json({
       success: true,
       data: {
         summary: {
-          totalEggs: totalEggs || 0,
-          totalMortality: totalMortality || 0,
-          recordCount,
-          avgEggsPerDay
+          totalEggs: summary?.totalEggs || 0,
+          totalMortality: summary?.totalMortality || 0,
+          recordCount: summary?.recordCount || 0,
+          avgEggsPerDay: summary?.recordCount
+            ? Number((summary.totalEggs / summary.recordCount).toFixed(2))
+            : 0
         },
-        trend: productionTrend
+        trend: trend.map(item => ({
+          date: item._id,
+          total_eggs: item.total_eggs,
+          total_mortality: item.total_mortality
+        }))
       }
     });
   } catch (error) {
@@ -71,54 +98,69 @@ const getProductionReport = async (req, res) => {
 const getFinancialReport = async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
+    const match = {};
+    const dateMatch = buildDateMatch(start_date, end_date);
+    if (Object.keys(dateMatch).length) match.date = dateMatch;
 
-    const where = {};
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
-    }
+    const [salesSummary] = await SalesRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: '$total_amount' },
+          salesCount: { $sum: 1 }
+        }
+      }
+    ]);
 
-    // Revenue
-    const totalRevenue = await SalesRecord.sum('total_amount', { where });
-    const salesCount = await SalesRecord.count({ where });
+    const [expenseSummary] = await Expense.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalExpenses: { $sum: '$amount' },
+          expenseCount: { $sum: 1 }
+        }
+      }
+    ]);
 
-    // Expenses
-    const totalExpenses = await Expense.sum('amount', { where });
-    const expenseCount = await Expense.count({ where });
+    const revenueByProduct = await SalesRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$product_type',
+          revenue: { $sum: '$total_amount' }
+        }
+      },
+      { $project: { product_type: '$_id', revenue: 1, _id: 0 } }
+    ]);
 
-    // Profit/Loss
-    const profit = (totalRevenue || 0) - (totalExpenses || 0);
-    const profitMargin = totalRevenue > 0 ? ((profit / totalRevenue) * 100).toFixed(2) : 0;
+    const expensesByCategory = await Expense.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$category',
+          amount: { $sum: '$amount' }
+        }
+      },
+      { $project: { category: '$_id', amount: 1, _id: 0 } }
+    ]);
 
-    // Revenue by product
-    const revenueByProduct = await SalesRecord.findAll({
-      where,
-      attributes: [
-        'product_type',
-        [SalesRecord.sequelize.fn('SUM', SalesRecord.sequelize.col('total_amount')), 'revenue']
-      ],
-      group: ['product_type']
-    });
-
-    // Expenses by category
-    const expensesByCategory = await Expense.findAll({
-      where,
-      attributes: [
-        'category',
-        [Expense.sequelize.fn('SUM', Expense.sequelize.col('amount')), 'amount']
-      ],
-      group: ['category']
-    });
+    const totalRevenue = salesSummary?.totalRevenue || 0;
+    const totalExpenses = expenseSummary?.totalExpenses || 0;
+    const profit = totalRevenue - totalExpenses;
+    const profitMargin = totalRevenue > 0 ? Number(((profit / totalRevenue) * 100).toFixed(2)) : 0;
 
     res.status(200).json({
       success: true,
       data: {
         summary: {
-          totalRevenue: totalRevenue || 0,
-          totalExpenses: totalExpenses || 0,
+          totalRevenue,
+          totalExpenses,
           profit,
-          profitMargin: parseFloat(profitMargin),
-          salesCount,
-          expenseCount
+          profitMargin,
+          salesCount: salesSummary?.salesCount || 0,
+          expenseCount: expenseSummary?.expenseCount || 0
         },
         revenueByProduct,
         expensesByCategory
@@ -142,47 +184,44 @@ const getFinancialReport = async (req, res) => {
 const getPerformanceMetrics = async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
+    const dateMatch = buildDateMatch(start_date, end_date);
+    const match = {};
+    if (Object.keys(dateMatch).length) match.date = dateMatch;
 
-    const dateWhere = {};
-    if (start_date && end_date) {
-      dateWhere.date = { [Op.between]: [start_date, end_date] };
-    }
+    const totalFlocks = await PoultryBatch.countDocuments();
+    const activeFlocks = await PoultryBatch.countDocuments({ status: 'Active' });
 
-    // Flock statistics
-    const totalFlocks = await PoultryBatch.count();
-    const activeFlocks = await PoultryBatch.count({ where: { status: 'Active' } });
-    const totalBirds = await PoultryBatch.sum('quantity', { where: { status: 'Active' } });
+    const [totalBirdsAgg] = await PoultryBatch.aggregate([
+      { $match: { status: 'Active' } },
+      { $group: { _id: null, total: { $sum: '$quantity' } } }
+    ]);
 
-    // Production efficiency
-    const totalEggs = await ProductionRecord.sum('eggs_collected', { where: dateWhere });
-    const productionDays = await ProductionRecord.count({ where: dateWhere });
-    const avgEggsPerDay = productionDays > 0 ? (totalEggs / productionDays).toFixed(2) : 0;
-
-    // Feed efficiency
-    const totalFeed = await FeedRecord.sum('quantity', { where: dateWhere });
-    const feedToEggRatio = totalEggs > 0 ? (totalFeed / totalEggs).toFixed(2) : 0;
-
-    // Health status
-    const healthyBatches = await HealthRecord.count({
-      where: { status: 'Healthy' },
-      distinct: true,
-      col: 'batch_id'
-    });
-
-    const underTreatment = await HealthRecord.count({
-      where: { status: 'Under Treatment' },
-      distinct: true,
-      col: 'batch_id'
-    });
-
-    // Inventory status
-    const lowStockItems = await Inventory.count({
-      where: {
-        quantity: {
-          [Op.lte]: Inventory.sequelize.col('minimum_stock')
+    const [productionSummary] = await ProductionRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalEggs: { $sum: '$eggs_collected' },
+          productionDays: { $sum: 1 }
         }
       }
+    ]);
+
+    const [feedSummary] = await FeedRecord.aggregate([
+      { $match: match },
+      { $group: { _id: null, totalFeed: { $sum: '$quantity' } } }
+    ]);
+
+    const healthyBatches = await HealthRecord.distinct('batch_id', { status: 'Healthy' });
+    const underTreatment = await HealthRecord.distinct('batch_id', { status: 'Under Treatment' });
+
+    const lowStockItems = await Inventory.countDocuments({
+      $expr: { $lte: ['$quantity', '$minimum_stock'] }
     });
+
+    const totalEggs = productionSummary?.totalEggs || 0;
+    const productionDays = productionSummary?.productionDays || 0;
+    const totalFeed = feedSummary?.totalFeed || 0;
 
     res.status(200).json({
       success: true,
@@ -190,20 +229,20 @@ const getPerformanceMetrics = async (req, res) => {
         flockMetrics: {
           totalFlocks,
           activeFlocks,
-          totalBirds: totalBirds || 0
+          totalBirds: totalBirdsAgg?.total || 0
         },
         productionMetrics: {
-          totalEggs: totalEggs || 0,
+          totalEggs,
           productionDays,
-          avgEggsPerDay: parseFloat(avgEggsPerDay)
+          avgEggsPerDay: productionDays ? Number((totalEggs / productionDays).toFixed(2)) : 0
         },
         feedMetrics: {
-          totalFeed: totalFeed || 0,
-          feedToEggRatio: parseFloat(feedToEggRatio)
+          totalFeed,
+          feedToEggRatio: totalEggs ? Number((totalFeed / totalEggs).toFixed(2)) : 0
         },
         healthMetrics: {
-          healthyBatches,
-          underTreatment
+          healthyBatches: healthyBatches.length,
+          underTreatment: underTreatment.length
         },
         inventoryMetrics: {
           lowStockItems
@@ -228,39 +267,36 @@ const getPerformanceMetrics = async (req, res) => {
 const getInventoryReport = async (req, res) => {
   try {
     const { item_type } = req.query;
+    const filter = {};
+    if (item_type) filter.item_type = item_type;
 
-    const where = {};
-    if (item_type) where.item_type = item_type;
+    const inventoryItems = await Inventory.find(filter);
 
-    const inventoryItems = await Inventory.findAll({ where });
-
-    // Calculate total value
     const totalValue = inventoryItems.reduce((sum, item) => {
-      return sum + (parseFloat(item.quantity) * parseFloat(item.unit_price || 0));
+      const unitPrice = Number(item.unit_price || 0);
+      return sum + item.quantity * unitPrice;
     }, 0);
 
-    // Low stock items
-    const lowStockItems = inventoryItems.filter(item => 
-      parseFloat(item.quantity) <= parseFloat(item.minimum_stock)
-    );
+    const lowStockItems = inventoryItems.filter(item => item.quantity <= item.minimum_stock);
 
-    // Group by type
-    const inventoryByType = await Inventory.findAll({
-      where,
-      attributes: [
-        'item_type',
-        [Inventory.sequelize.fn('COUNT', Inventory.sequelize.col('inventory_id')), 'item_count'],
-        [Inventory.sequelize.fn('SUM', Inventory.sequelize.col('quantity')), 'total_quantity']
-      ],
-      group: ['item_type']
-    });
+    const inventoryByType = await Inventory.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: '$item_type',
+          item_count: { $sum: 1 },
+          total_quantity: { $sum: '$quantity' }
+        }
+      },
+      { $project: { item_type: '$_id', item_count: 1, total_quantity: 1, _id: 0 } }
+    ]);
 
     res.status(200).json({
       success: true,
       data: {
         summary: {
           totalItems: inventoryItems.length,
-          totalValue: totalValue.toFixed(2),
+          totalValue: Number(totalValue.toFixed(2)),
           lowStockCount: lowStockItems.length
         },
         inventoryByType,

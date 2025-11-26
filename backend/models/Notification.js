@@ -1,40 +1,34 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { mongoose } = require('../config/database');
+const applyVirtualId = require('./plugins/addVirtualId');
 
-const Notification = sequelize.define('Notification', {
-  notification_id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  user_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
+const NotificationSchema = new mongoose.Schema(
+  {
+    user_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    message: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    type: {
+      type: String,
+      enum: ['Info', 'Warning', 'Alert', 'Success'],
+      default: 'Info'
+    },
+    is_read: {
+      type: Boolean,
+      default: false
     }
   },
-  message: {
-    type: DataTypes.TEXT,
-    allowNull: false
-  },
-  type: {
-    type: DataTypes.ENUM('Info', 'Warning', 'Alert', 'Success'),
-    allowNull: false,
-    defaultValue: 'Info'
-  },
-  is_read: {
-    type: DataTypes.BOOLEAN,
-    allowNull: false,
-    defaultValue: false
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
   }
-}, {
-  tableName: 'notifications',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at'
-});
+);
 
-module.exports = Notification;
+applyVirtualId(NotificationSchema, 'notification_id');
+
+module.exports = mongoose.model('Notification', NotificationSchema);
 

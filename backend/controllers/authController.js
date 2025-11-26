@@ -19,7 +19,7 @@ const register = async (req, res) => {
     }
 
     // Check if user already exists
-    const userExists = await User.findOne({ where: { email } });
+    const userExists = await User.findOne({ email });
 
     if (userExists) {
       return res.status(400).json({
@@ -54,6 +54,14 @@ const register = async (req, res) => {
     });
   } catch (error) {
     console.error('Register error:', error);
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'User with this email already exists'
+      });
+    }
+
     res.status(500).json({
       success: false,
       message: 'Error registering user',
@@ -80,7 +88,7 @@ const login = async (req, res) => {
     }
 
     // Find user
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ email }).select('+password');
 
     if (!user) {
       return res.status(401).json({
@@ -131,9 +139,7 @@ const login = async (req, res) => {
  */
 const getMe = async (req, res) => {
   try {
-    const user = await User.findByPk(req.user.user_id, {
-      attributes: { exclude: ['password'] }
-    });
+    const user = await User.findById(req.user.user_id).select('-password');
 
     res.status(200).json({
       success: true,

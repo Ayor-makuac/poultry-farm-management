@@ -1,6 +1,7 @@
 const request = require('supertest');
 const app = require('../../server');
 const { User } = require('../../models');
+const { mongoose } = require('../../config/database');
 
 describe('Users API Tests', () => {
   let adminToken;
@@ -29,8 +30,8 @@ describe('Users API Tests', () => {
 
   afterAll(async () => {
     // Clean up test users
-    if (adminUser) await User.destroy({ where: { user_id: adminUser.user_id } });
-    if (testUser) await User.destroy({ where: { user_id: testUser.user_id } });
+    if (adminUser?.user_id) await User.deleteOne({ _id: adminUser.user_id });
+    if (testUser?.user_id) await User.deleteOne({ _id: testUser.user_id });
   });
 
   describe('GET /api/users', () => {
@@ -69,7 +70,7 @@ describe('Users API Tests', () => {
       expect(response.status).toBe(403);
 
       // Cleanup
-      await User.destroy({ where: { user_id: worker.user_id } });
+      await User.deleteOne({ _id: worker.user_id });
     });
   });
 
@@ -85,8 +86,9 @@ describe('Users API Tests', () => {
     });
 
     it('should return 404 for non-existent user', async () => {
+      const fakeId = new mongoose.Types.ObjectId().toString();
       const response = await request(app)
-        .get('/api/users/99999')
+        .get(`/api/users/${fakeId}`)
         .set('Authorization', `Bearer ${adminToken}`);
 
       expect(response.status).toBe(404);
@@ -141,7 +143,7 @@ describe('Users API Tests', () => {
 
       expect(response.status).toBe(403);
 
-      await User.destroy({ where: { user_id: worker.user_id } });
+      await User.deleteOne({ _id: worker.user_id });
     });
   });
 
@@ -162,7 +164,7 @@ describe('Users API Tests', () => {
       expect(response.body.success).toBe(true);
 
       // Verify user is deleted
-      const deletedUser = await User.findByPk(userToDelete.user_id);
+      const deletedUser = await User.findById(userToDelete.user_id);
       expect(deletedUser).toBeNull();
     });
   });

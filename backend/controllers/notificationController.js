@@ -18,7 +18,7 @@ const createNotification = async (req, res) => {
     }
 
     // Check if user exists
-    const user = await User.findByPk(user_id);
+    const user = await User.findById(user_id);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -56,24 +56,20 @@ const createNotification = async (req, res) => {
 const getUserNotifications = async (req, res) => {
   try {
     // Users can only see their own notifications unless they're admin
-    if (req.user.user_id !== parseInt(req.params.userId) && req.user.role !== 'Admin') {
+    if (req.user.user_id !== req.params.userId && req.user.role !== 'Admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to view these notifications'
       });
     }
 
-    const notifications = await Notification.findAll({
-      where: { user_id: req.params.userId },
-      order: [['created_at', 'DESC']],
-      limit: 50
-    });
+    const notifications = await Notification.find({ user_id: req.params.userId })
+      .sort({ created_at: -1 })
+      .limit(50);
 
-    const unreadCount = await Notification.count({
-      where: { 
-        user_id: req.params.userId,
-        is_read: false
-      }
+    const unreadCount = await Notification.countDocuments({
+      user_id: req.params.userId,
+      is_read: false
     });
 
     res.status(200).json({
@@ -99,7 +95,7 @@ const getUserNotifications = async (req, res) => {
  */
 const markAsRead = async (req, res) => {
   try {
-    const notification = await Notification.findByPk(req.params.id);
+    const notification = await Notification.findById(req.params.id);
 
     if (!notification) {
       return res.status(404).json({
@@ -109,14 +105,15 @@ const markAsRead = async (req, res) => {
     }
 
     // Users can only mark their own notifications as read unless they're admin
-    if (notification.user_id !== req.user.user_id && req.user.role !== 'Admin') {
+    if (notification.user_id.toString() !== req.user.user_id && req.user.role !== 'Admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update this notification'
       });
     }
 
-    await notification.update({ is_read: true });
+    notification.is_read = true;
+    await notification.save();
 
     res.status(200).json({
       success: true,
@@ -141,16 +138,16 @@ const markAsRead = async (req, res) => {
 const markAllAsRead = async (req, res) => {
   try {
     // Users can only mark their own notifications as read unless they're admin
-    if (req.user.user_id !== parseInt(req.params.userId) && req.user.role !== 'Admin') {
+    if (req.user.user_id !== req.params.userId && req.user.role !== 'Admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to update these notifications'
       });
     }
 
-    await Notification.update(
-      { is_read: true },
-      { where: { user_id: req.params.userId, is_read: false } }
+    await Notification.updateMany(
+      { user_id: req.params.userId, is_read: false },
+      { $set: { is_read: true } }
     );
 
     res.status(200).json({
@@ -174,7 +171,7 @@ const markAllAsRead = async (req, res) => {
  */
 const deleteNotification = async (req, res) => {
   try {
-    const notification = await Notification.findByPk(req.params.id);
+    const notification = await Notification.findById(req.params.id);
 
     if (!notification) {
       return res.status(404).json({
@@ -184,14 +181,14 @@ const deleteNotification = async (req, res) => {
     }
 
     // Users can only delete their own notifications unless they're admin
-    if (notification.user_id !== req.user.user_id && req.user.role !== 'Admin') {
+    if (notification.user_id.toString() !== req.user.user_id && req.user.role !== 'Admin') {
       return res.status(403).json({
         success: false,
         message: 'Not authorized to delete this notification'
       });
     }
 
-    await notification.destroy();
+    await notification.deleteOne();
 
     res.status(200).json({
       success: true,

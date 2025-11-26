@@ -6,14 +6,12 @@ describe('Auth API Tests', () => {
   let testUser;
 
   beforeAll(async () => {
-    // Clean up any existing test users
-    await User.destroy({ where: { email: 'test@example.com' } });
+    await User.deleteMany({ email: 'test@example.com' });
   });
 
   afterAll(async () => {
-    // Clean up test data
-    if (testUser) {
-      await User.destroy({ where: { user_id: testUser.user_id } });
+    if (testUser?.user_id) {
+      await User.deleteOne({ _id: testUser.user_id });
     }
   });
 

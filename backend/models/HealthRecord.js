@@ -1,59 +1,51 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { mongoose } = require('../config/database');
+const applyVirtualId = require('./plugins/addVirtualId');
 
-const HealthRecord = sequelize.define('HealthRecord', {
-  health_id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  batch_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'poultry_batches',
-      key: 'batch_id'
+const HealthRecordSchema = new mongoose.Schema(
+  {
+    batch_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PoultryBatch',
+      required: true
+    },
+    vaccination_date: {
+      type: Date
+    },
+    vaccine_name: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    },
+    disease: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    },
+    treatment: {
+      type: String,
+      trim: true
+    },
+    vet_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    status: {
+      type: String,
+      enum: ['Healthy', 'Under Treatment', 'Quarantined', 'Recovered'],
+      default: 'Healthy',
+      required: true
+    },
+    notes: {
+      type: String,
+      trim: true
     }
   },
-  vaccination_date: {
-    type: DataTypes.DATEONLY,
-    allowNull: true
-  },
-  vaccine_name: {
-    type: DataTypes.STRING(100),
-    allowNull: true
-  },
-  disease: {
-    type: DataTypes.STRING(100),
-    allowNull: true
-  },
-  treatment: {
-    type: DataTypes.TEXT,
-    allowNull: true
-  },
-  vet_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
-  },
-  status: {
-    type: DataTypes.ENUM('Healthy', 'Under Treatment', 'Quarantined', 'Recovered'),
-    allowNull: false,
-    defaultValue: 'Healthy'
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
   }
-}, {
-  tableName: 'health_records',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at'
-});
+);
 
-module.exports = HealthRecord;
+applyVirtualId(HealthRecordSchema, 'health_id');
+
+module.exports = mongoose.model('HealthRecord', HealthRecordSchema);
 

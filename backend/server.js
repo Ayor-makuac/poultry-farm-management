@@ -58,18 +58,95 @@ app.use((req, res) => {
 
 const PORT = process.env.PORT || 5000;
 
-// Connect to database and start server (only if not in test environment)
-if (process.env.NODE_ENV !== 'test') {
-  connectDB().then(() => {
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-    });
-  }).catch(err => {
+// Auto-seed users on first startup if none exist
+const autoSeedUsers = async () => {
+  try {
+    const User = require('./models/User');
+    const userCount = await User.countDocuments();
+    
+    if (userCount === 0) {
+      console.log('🌱 No users found. Seeding default users...');
+      const seedUsers = require('./scripts/seedUsers');
+      // Import the function but don't run it directly (it closes connection)
+      // Instead, create users inline
+      const defaultUsers = [
+        {
+          name: 'Admin User',
+          email: 'admin@poultryfarm.com',
+          password: 'admin123',
+          role: 'Admin',
+          phone: '+254700000001'
+        },
+        {
+          name: 'Manager User',
+          email: 'manager@poultryfarm.com',
+          password: 'manager123',
+          role: 'Manager',
+          phone: '+254700000002'
+        },
+        {
+          name: 'Worker User',
+          email: 'worker@poultryfarm.com',
+          password: 'worker123',
+          role: 'Worker',
+          phone: '+254700000003'
+        },
+        {
+          name: 'Veterinarian User',
+          email: 'vet@poultryfarm.com',
+          password: 'vet123',
+          role: 'Veterinarian',
+          phone: '+254700000004'
+        }
+      ];
+
+      for (const userData of defaultUsers) {
+        try {
+          const existingUser = await User.findOne({ email: userData.email });
+          if (!existingUser) {
+            await User.create(userData);
+            console.log(`✅ Created ${userData.role}: ${userData.email}`);
+          }
+        } catch (error) {
+          if (error.code !== 11000) {
+            console.error(`❌ Error creating user ${userData.email}:`, error.message);
+          }
+        }
+      }
+      console.log('💡 Default credentials:');
+      defaultUsers.forEach(user => {
+        console.log(`   ${user.role.padEnd(12)} - ${user.email.padEnd(25)} / ${user.password}`);
+      });
+      console.log('⚠️  IMPORTANT: Change these passwords in production!\n');
+    }
+  } catch (error) {
+    console.error('⚠️  Auto-seeding failed:', error.message);
+    // Don't exit - allow server to start even if seeding fails
+  }
+};
+
+const startServer = async () => {
+  try {
+    await connectDB();
+
+    // Auto-seed users if none exist (only in non-test environments)
+    if (process.env.NODE_ENV !== 'test' && process.env.AUTO_SEED !== 'false') {
+      await autoSeedUsers();
+    }
+
+    if (process.env.NODE_ENV !== 'test') {
+      app.listen(PORT, () => {
+        console.log(`🚀 Server running on port ${PORT}`);
+        console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      });
+    }
+  } catch (err) {
     console.error('Failed to start server:', err);
     process.exit(1);
-  });
-}
+  }
+};
+
+startServer();
 
 // Export app for testing
 module.exports = app;

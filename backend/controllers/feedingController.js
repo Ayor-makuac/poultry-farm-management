@@ -1,5 +1,5 @@
-const { FeedRecord, PoultryBatch, User } = require('../models');
-const { Op } = require('sequelize');
+const { FeedRecord, PoultryBatch } = require('../models');
+const { mongoose } = require('../config/database');
 
 /**
  * @desc    Create feeding record
@@ -19,7 +19,7 @@ const createFeedingRecord = async (req, res) => {
     }
 
     // Check if batch exists
-    const batch = await PoultryBatch.findByPk(batch_id);
+    const batch = await PoultryBatch.findById(batch_id);
     if (!batch) {
       return res.status(404).json({
         success: false,
@@ -36,12 +36,9 @@ const createFeedingRecord = async (req, res) => {
       recorded_by: req.user.user_id
     });
 
-    const record = await FeedRecord.findByPk(feedRecord.feed_id, {
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    const record = await FeedRecord.findById(feedRecord._id)
+      .populate('batch_id')
+      .populate('recorded_by', 'name role');
 
     res.status(201).json({
       success: true,
@@ -67,26 +64,19 @@ const getFeedingRecords = async (req, res) => {
   try {
     const { batch_id, feed_type, start_date, end_date } = req.query;
 
-    // Build filter
-    const where = {};
-    if (batch_id) where.batch_id = batch_id;
-    if (feed_type) where.feed_type = { [Op.like]: `%${feed_type}%` };
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
-    } else if (start_date) {
-      where.date = { [Op.gte]: start_date };
-    } else if (end_date) {
-      where.date = { [Op.lte]: end_date };
+    const filter = {};
+    if (batch_id) filter.batch_id = batch_id;
+    if (feed_type) filter.feed_type = { $regex: feed_type, $options: 'i' };
+    if (start_date || end_date) {
+      filter.date = {};
+      if (start_date) filter.date.$gte = new Date(start_date);
+      if (end_date) filter.date.$lte = new Date(end_date);
     }
 
-    const feedingRecords = await FeedRecord.findAll({
-      where,
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['date', 'DESC']]
-    });
+    const feedingRecords = await FeedRecord.find(filter)
+      .populate('batch_id')
+      .populate('recorded_by', 'name role')
+      .sort({ date: -1 });
 
     res.status(200).json({
       success: true,
@@ -110,19 +100,15 @@ const getFeedingRecords = async (req, res) => {
  */
 const getBatchFeedingRecords = async (req, res) => {
   try {
-    const feedingRecords = await FeedRecord.findAll({
-      where: { batch_id: req.params.batchId },
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['date', 'DESC']]
-    });
+    const feedingRecords = await FeedRecord.find({ batch_id: req.params.batchId })
+      .populate('batch_id')
+      .populate('recorded_by', 'name role')
+      .sort({ date: -1 });
 
-    // Calculate total feed consumed
-    const totalFeed = await FeedRecord.sum('quantity', {
-      where: { batch_id: req.params.batchId }
-    });
+    const [totalFeedAgg] = await FeedRecord.aggregate([
+      { $match: { batch_id: new mongoose.Types.ObjectId(req.params.batchId) } },
+      { $group: { _id: null, total: { $sum: '$quantity' } } }
+    ]);
 
     res.status(200).json({
       success: true,
@@ -149,7 +135,7 @@ const updateFeedingRecord = async (req, res) => {
   try {
     const { feed_type, quantity, unit, date } = req.body;
 
-    const feedRecord = await FeedRecord.findByPk(req.params.id);
+    const feedRecord = await FeedRecord.findById(req.params.id);
 
     if (!feedRecord) {
       return res.status(404).json({
@@ -158,19 +144,16 @@ const updateFeedingRecord = async (req, res) => {
       });
     }
 
-    await feedRecord.update({
-      feed_type: feed_type || feedRecord.feed_type,
-      quantity: quantity !== undefined ? quantity : feedRecord.quantity,
-      unit: unit || feedRecord.unit,
-      date: date || feedRecord.date
-    });
+    feedRecord.feed_type = feed_type || feedRecord.feed_type;
+    feedRecord.quantity = quantity ?? feedRecord.quantity;
+    feedRecord.unit = unit || feedRecord.unit;
+    feedRecord.date = date || feedRecord.date;
 
-    const updatedRecord = await FeedRecord.findByPk(feedRecord.feed_id, {
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    await feedRecord.save();
+
+    const updatedRecord = await FeedRecord.findById(feedRecord._id)
+      .populate('batch_id')
+      .populate('recorded_by', 'name role');
 
     res.status(200).json({
       success: true,
@@ -194,7 +177,7 @@ const updateFeedingRecord = async (req, res) => {
  */
 const deleteFeedingRecord = async (req, res) => {
   try {
-    const feedRecord = await FeedRecord.findByPk(req.params.id);
+    const feedRecord = await FeedRecord.findById(req.params.id);
 
     if (!feedRecord) {
       return res.status(404).json({
@@ -203,7 +186,7 @@ const deleteFeedingRecord = async (req, res) => {
       });
     }
 
-    await feedRecord.destroy();
+    await feedRecord.deleteOne();
 
     res.status(200).json({
       success: true,

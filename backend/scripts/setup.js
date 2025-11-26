@@ -1,34 +1,18 @@
-const mysql = require('mysql2/promise');
+const { connectDB, mongoose } = require('../config/database');
+require('../models');
 require('dotenv').config();
 
-async function setupDatabase() {
+(async () => {
   try {
-    // Connect to MySQL without specifying database
-    const connection = await mysql.createConnection({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD
-    });
-
-    console.log('✅ Connected to MySQL server');
-
-    // Create database if it doesn't exist
-    await connection.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME}`);
-    console.log(`✅ Database '${process.env.DB_NAME}' created or already exists`);
-
-    await connection.end();
-    console.log('✅ Database setup completed successfully!');
-    console.log('\nYou can now run: npm run dev');
-    
+    await connectDB();
+    console.log('✅ MongoDB connection verified successfully');
+    console.log('👉 Your collections and indexes will be created automatically on first use.');
   } catch (error) {
-    console.error('❌ Database setup failed:', error.message);
-    console.error('\nPlease ensure:');
-    console.error('1. MySQL is running');
-    console.error('2. DB_USER and DB_PASSWORD in .env are correct');
-    console.error('3. MySQL user has permission to create databases');
+    console.error('❌ MongoDB setup failed:', error.message);
     process.exit(1);
+  } finally {
+    await mongoose.connection.close();
+    process.exit(0);
   }
-}
-
-setupDatabase();
+})();
 

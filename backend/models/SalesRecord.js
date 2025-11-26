@@ -1,61 +1,58 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { mongoose } = require('../config/database');
+const applyVirtualId = require('./plugins/addVirtualId');
 
-const SalesRecord = sequelize.define('SalesRecord', {
-  sale_id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  product_type: {
-    type: DataTypes.ENUM('Eggs', 'Birds', 'Manure', 'Other'),
-    allowNull: false
-  },
-  quantity: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    validate: {
+const SalesRecordSchema = new mongoose.Schema(
+  {
+    product_type: {
+      type: String,
+      enum: ['Eggs', 'Birds', 'Manure', 'Other'],
+      required: true
+    },
+    quantity: {
+      type: Number,
+      required: true,
       min: 0
+    },
+    unit_price: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    total_amount: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    customer_name: {
+      type: String,
+      trim: true,
+      maxlength: 100
+    },
+    customer_phone: {
+      type: String,
+      trim: true,
+      maxlength: 20
+    },
+    date: {
+      type: Date,
+      required: true
+    },
+    recorded_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    notes: {
+      type: String,
+      trim: true
     }
   },
-  unit_price: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  total_amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
-  },
-  customer_name: {
-    type: DataTypes.STRING(100),
-    allowNull: true
-  },
-  customer_phone: {
-    type: DataTypes.STRING(20),
-    allowNull: true
-  },
-  date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
-  },
-  recorded_by: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
   }
-}, {
-  tableName: 'sales_records',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at'
-});
+);
 
-module.exports = SalesRecord;
+applyVirtualId(SalesRecordSchema, 'sale_id');
+
+module.exports = mongoose.model('SalesRecord', SalesRecordSchema);
 

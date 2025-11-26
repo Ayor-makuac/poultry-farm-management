@@ -10,7 +10,7 @@ cd backend
 npm install
 ```
 
-2. **Set up test database** (create a separate test database in MySQL)
+2. **Set up test database** (create a separate test database/collection namespace in MongoDB)
 
 3. **Run tests**:
 ```bash

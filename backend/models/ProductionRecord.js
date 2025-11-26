@@ -1,57 +1,43 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { mongoose } = require('../config/database');
+const applyVirtualId = require('./plugins/addVirtualId');
 
-const ProductionRecord = sequelize.define('ProductionRecord', {
-  production_id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  batch_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'poultry_batches',
-      key: 'batch_id'
-    }
-  },
-  eggs_collected: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    validate: {
+const ProductionRecordSchema = new mongoose.Schema(
+  {
+    batch_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PoultryBatch',
+      required: true
+    },
+    eggs_collected: {
+      type: Number,
+      required: true,
       min: 0
-    }
-  },
-  mortality_count: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    defaultValue: 0,
-    validate: {
+    },
+    mortality_count: {
+      type: Number,
+      default: 0,
       min: 0
+    },
+    date: {
+      type: Date,
+      required: true
+    },
+    recorded_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    notes: {
+      type: String,
+      trim: true
     }
   },
-  date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
-  },
-  recorded_by: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
   }
-}, {
-  tableName: 'production_records',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at'
-});
+);
 
-module.exports = ProductionRecord;
+applyVirtualId(ProductionRecordSchema, 'production_id');
+
+module.exports = mongoose.model('ProductionRecord', ProductionRecordSchema);
 

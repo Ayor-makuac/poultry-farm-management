@@ -1,5 +1,4 @@
 const { Inventory } = require('../models');
-const { Op } = require('sequelize');
 
 /**
  * @desc    Create inventory item
@@ -52,17 +51,11 @@ const getInventoryItems = async (req, res) => {
   try {
     const { item_type, search } = req.query;
 
-    // Build filter
-    const where = {};
-    if (item_type) where.item_type = item_type;
-    if (search) {
-      where.item_name = { [Op.like]: `%${search}%` };
-    }
+    const filter = {};
+    if (item_type) filter.item_type = item_type;
+    if (search) filter.item_name = { $regex: search, $options: 'i' };
 
-    const inventoryItems = await Inventory.findAll({
-      where,
-      order: [['last_updated', 'DESC']]
-    });
+    const inventoryItems = await Inventory.find(filter).sort({ last_updated: -1 });
 
     res.status(200).json({
       success: true,
@@ -86,7 +79,7 @@ const getInventoryItems = async (req, res) => {
  */
 const getInventoryItem = async (req, res) => {
   try {
-    const inventoryItem = await Inventory.findByPk(req.params.id);
+    const inventoryItem = await Inventory.findById(req.params.id);
 
     if (!inventoryItem) {
       return res.status(404).json({
@@ -118,7 +111,7 @@ const updateInventoryItem = async (req, res) => {
   try {
     const { item_name, item_type, quantity, unit, minimum_stock, unit_price, supplier } = req.body;
 
-    const inventoryItem = await Inventory.findByPk(req.params.id);
+    const inventoryItem = await Inventory.findById(req.params.id);
 
     if (!inventoryItem) {
       return res.status(404).json({
@@ -127,15 +120,15 @@ const updateInventoryItem = async (req, res) => {
       });
     }
 
-    await inventoryItem.update({
-      item_name: item_name || inventoryItem.item_name,
-      item_type: item_type || inventoryItem.item_type,
-      quantity: quantity !== undefined ? quantity : inventoryItem.quantity,
-      unit: unit || inventoryItem.unit,
-      minimum_stock: minimum_stock !== undefined ? minimum_stock : inventoryItem.minimum_stock,
-      unit_price: unit_price !== undefined ? unit_price : inventoryItem.unit_price,
-      supplier: supplier || inventoryItem.supplier
-    });
+    inventoryItem.item_name = item_name || inventoryItem.item_name;
+    inventoryItem.item_type = item_type || inventoryItem.item_type;
+    inventoryItem.quantity = quantity ?? inventoryItem.quantity;
+    inventoryItem.unit = unit || inventoryItem.unit;
+    inventoryItem.minimum_stock = minimum_stock ?? inventoryItem.minimum_stock;
+    inventoryItem.unit_price = unit_price ?? inventoryItem.unit_price;
+    inventoryItem.supplier = supplier || inventoryItem.supplier;
+
+    await inventoryItem.save();
 
     res.status(200).json({
       success: true,
@@ -159,7 +152,7 @@ const updateInventoryItem = async (req, res) => {
  */
 const deleteInventoryItem = async (req, res) => {
   try {
-    const inventoryItem = await Inventory.findByPk(req.params.id);
+    const inventoryItem = await Inventory.findById(req.params.id);
 
     if (!inventoryItem) {
       return res.status(404).json({
@@ -168,7 +161,7 @@ const deleteInventoryItem = async (req, res) => {
       });
     }
 
-    await inventoryItem.destroy();
+    await inventoryItem.deleteOne();
 
     res.status(200).json({
       success: true,
@@ -191,14 +184,9 @@ const deleteInventoryItem = async (req, res) => {
  */
 const getLowStockAlerts = async (req, res) => {
   try {
-    const lowStockItems = await Inventory.findAll({
-      where: {
-        quantity: {
-          [Op.lte]: Inventory.sequelize.col('minimum_stock')
-        }
-      },
-      order: [['quantity', 'ASC']]
-    });
+    const lowStockItems = await Inventory.find({
+      $expr: { $lte: ['$quantity', '$minimum_stock'] }
+    }).sort({ quantity: 1 });
 
     res.status(200).json({
       success: true,

@@ -7,16 +7,16 @@ The foundation of your Poultry Farm Management System is ready. Follow these ste
 ## Prerequisites
 
 Before you begin, make sure you have:
-- ✅ Node.js (v14 or higher) - [Download here](https://nodejs.org/)
-- ✅ MySQL (v5.7 or higher) - [Download here](https://dev.mysql.com/downloads/)
+- ✅ Node.js (v18 or higher) - [Download here](https://nodejs.org/)
+- ✅ MongoDB (local server or [MongoDB Atlas](https://www.mongodb.com/atlas/database))
 - ✅ A code editor (VS Code recommended)
 
 ## Step-by-Step Setup
 
-### 1. Install MySQL (if not already installed)
-- Download and install MySQL
-- Remember your root password
-- Start MySQL service
+### 1. Prepare MongoDB
+- Install MongoDB locally **or** create a free MongoDB Atlas cluster
+- Make sure the MongoDB service is running (or that your Atlas cluster is reachable)
+- Copy your MongoDB connection string (e.g., `mongodb://localhost:27017/poultry_farm` or the Atlas URI)
 
 ### 2. Navigate to Backend Directory
 ```bash
@@ -30,27 +30,26 @@ npm install
 ```
 
 ### 4. Configure Environment Variables
-Open `backend/.env` and update:
+Create or update `backend/.env`:
 ```env
-DB_PASSWORD=your_mysql_root_password_here
+MONGO_URI=mongodb://localhost:27017/poultry_farm
 JWT_SECRET=change_this_to_a_random_secure_string
+CLIENT_URL=http://localhost:3000
 ```
 
 **Important:** 
-- Replace `your_mysql_root_password_here` with your actual MySQL password
-- Generate a secure JWT secret (can be any long random string)
+- Replace `MONGO_URI` with your Atlas URI when deploying
+- Generate a secure JWT secret (any long random string works)
 
-### 5. Create Database
-Run the setup script:
+### 5. (Optional) Verify MongoDB Connectivity
 ```bash
 npm run setup
 ```
 
 You should see:
 ```
-✅ Connected to MySQL server
-✅ Database 'poultry_farm_db' created or already exists
-✅ Database setup completed successfully!
+✅ MongoDB connection verified successfully
+👉 Your collections and indexes will be created automatically on first use.
 ```
 
 ### 6. Start the Server
@@ -60,8 +59,8 @@ npm run dev
 
 You should see:
 ```
-✅ Database connected successfully
-✅ Database models synchronized
+✅ MongoDB connected successfully
+📦 Database: poultry_farm
 🚀 Server running on port 5000
 📍 Environment: development
 ```
@@ -108,7 +107,7 @@ backend/
 └── .env             ✅ Configuration
 ```
 
-### Database Tables Created
+### Database Collections
 1. **users** - Admin, Manager, Worker, Veterinarian accounts
 2. **poultry_batches** - Flock information
 3. **feed_records** - Daily feeding logs
@@ -123,9 +122,9 @@ backend/
 
 ### Problem: "Cannot connect to database"
 **Solution:** 
-- Check if MySQL is running
-- Verify DB_PASSWORD in `.env` is correct
-- Ensure MySQL is on port 3306
+- Ensure MongoDB service is running (or your Atlas cluster is online)
+- Verify `MONGO_URI` in `.env` is correct
+- If using Atlas, make sure your IP whitelist allows your machine
 
 ### Problem: "Port 5000 already in use"
 **Solution:**
@@ -148,7 +147,7 @@ npm run dev
 # Start production server
 npm start
 
-# Setup/Reset database
+# Verify Mongo connection manually
 npm run setup
 
 # Check if server is running

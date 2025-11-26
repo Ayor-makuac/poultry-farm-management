@@ -1,49 +1,44 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const { mongoose } = require('../config/database');
+const applyVirtualId = require('./plugins/addVirtualId');
 
-const Expense = sequelize.define('Expense', {
-  expense_id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  category: {
-    type: DataTypes.ENUM('Feed', 'Medicine', 'Labor', 'Equipment', 'Utilities', 'Maintenance', 'Other'),
-    allowNull: false
-  },
-  description: {
-    type: DataTypes.STRING(255),
-    allowNull: false
-  },
-  amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    validate: {
+const ExpenseSchema = new mongoose.Schema(
+  {
+    category: {
+      type: String,
+      enum: ['Feed', 'Medicine', 'Labor', 'Equipment', 'Utilities', 'Maintenance', 'Other'],
+      required: true
+    },
+    description: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 255
+    },
+    amount: {
+      type: Number,
+      required: true,
       min: 0
+    },
+    date: {
+      type: Date,
+      required: true
+    },
+    recorded_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    notes: {
+      type: String,
+      trim: true
     }
   },
-  date: {
-    type: DataTypes.DATEONLY,
-    allowNull: false
-  },
-  recorded_by: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'user_id'
-    }
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
   }
-}, {
-  tableName: 'expenses',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at'
-});
+);
 
-module.exports = Expense;
+applyVirtualId(ExpenseSchema, 'expense_id');
+
+module.exports = mongoose.model('Expense', ExpenseSchema);
 

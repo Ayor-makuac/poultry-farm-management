@@ -1,63 +1,64 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
 const bcrypt = require('bcrypt');
+const { mongoose } = require('../config/database');
+const applyVirtualId = require('./plugins/addVirtualId');
 
-const User = sequelize.define('User', {
-  user_id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
-  },
-  name: {
-    type: DataTypes.STRING(100),
-    allowNull: false
-  },
-  email: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
-    unique: true,
-    validate: {
-      isEmail: true
-    }
-  },
-  password: {
-    type: DataTypes.STRING(255),
-    allowNull: false
-  },
-  role: {
-    type: DataTypes.ENUM('Admin', 'Manager', 'Worker', 'Veterinarian'),
-    allowNull: false,
-    defaultValue: 'Worker'
-  },
-  phone: {
-    type: DataTypes.STRING(20),
-    allowNull: true
-  }
-}, {
-  tableName: 'users',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
-  hooks: {
-    beforeCreate: async (user) => {
-      if (user.password) {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(user.password, salt);
-      }
+const UserSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100
     },
-    beforeUpdate: async (user) => {
-      if (user.changed('password')) {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(user.password, salt);
-      }
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true
+    },
+    password: {
+      type: String,
+      required: true,
+      minlength: 6
+    },
+    role: {
+      type: String,
+      enum: ['Admin', 'Manager', 'Worker', 'Veterinarian'],
+      default: 'Worker',
+      required: true
+    },
+    phone: {
+      type: String,
+      trim: true
     }
+  },
+  {
+    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' }
+  }
+);
+
+UserSchema.index({ email: 1 }, { unique: true });
+
+UserSchema.pre('save', async function hashPassword(next) {
+  if (!this.isModified('password')) {
+    return next();
+  }
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
   }
 });
 
-// Instance method to compare password
-User.prototype.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
+UserSchema.methods.comparePassword = function comparePassword(candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.password);
 };
 
-module.exports = User;
+applyVirtualId(UserSchema, 'user_id');
+
+module.exports = mongoose.model('User', UserSchema);
 

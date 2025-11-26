@@ -1,5 +1,4 @@
-const { HealthRecord, PoultryBatch, User } = require('../models');
-const { Op } = require('sequelize');
+const { HealthRecord, PoultryBatch } = require('../models');
 
 /**
  * @desc    Create health record
@@ -19,7 +18,7 @@ const createHealthRecord = async (req, res) => {
     }
 
     // Check if batch exists
-    const batch = await PoultryBatch.findByPk(batch_id);
+    const batch = await PoultryBatch.findById(batch_id);
     if (!batch) {
       return res.status(404).json({
         success: false,
@@ -38,12 +37,9 @@ const createHealthRecord = async (req, res) => {
       notes
     });
 
-    const record = await HealthRecord.findByPk(healthRecord.health_id, {
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'veterinarian', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    const record = await HealthRecord.findById(healthRecord._id)
+      .populate('batch_id')
+      .populate('vet_id', 'name role');
 
     res.status(201).json({
       success: true,
@@ -69,20 +65,15 @@ const getHealthRecords = async (req, res) => {
   try {
     const { batch_id, status, disease } = req.query;
 
-    // Build filter
-    const where = {};
-    if (batch_id) where.batch_id = batch_id;
-    if (status) where.status = status;
-    if (disease) where.disease = { [Op.like]: `%${disease}%` };
+    const filter = {};
+    if (batch_id) filter.batch_id = batch_id;
+    if (status) filter.status = status;
+    if (disease) filter.disease = { $regex: disease, $options: 'i' };
 
-    const healthRecords = await HealthRecord.findAll({
-      where,
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'veterinarian', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['created_at', 'DESC']]
-    });
+    const healthRecords = await HealthRecord.find(filter)
+      .populate('batch_id')
+      .populate('vet_id', 'name role')
+      .sort({ created_at: -1 });
 
     res.status(200).json({
       success: true,
@@ -106,14 +97,10 @@ const getHealthRecords = async (req, res) => {
  */
 const getBatchHealthRecords = async (req, res) => {
   try {
-    const healthRecords = await HealthRecord.findAll({
-      where: { batch_id: req.params.batchId },
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'veterinarian', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['created_at', 'DESC']]
-    });
+    const healthRecords = await HealthRecord.find({ batch_id: req.params.batchId })
+      .populate('batch_id')
+      .populate('vet_id', 'name role')
+      .sort({ created_at: -1 });
 
     res.status(200).json({
       success: true,
@@ -139,7 +126,7 @@ const updateHealthRecord = async (req, res) => {
   try {
     const { vaccination_date, vaccine_name, disease, treatment, status, notes } = req.body;
 
-    const healthRecord = await HealthRecord.findByPk(req.params.id);
+    const healthRecord = await HealthRecord.findById(req.params.id);
 
     if (!healthRecord) {
       return res.status(404).json({
@@ -148,21 +135,18 @@ const updateHealthRecord = async (req, res) => {
       });
     }
 
-    await healthRecord.update({
-      vaccination_date: vaccination_date || healthRecord.vaccination_date,
-      vaccine_name: vaccine_name || healthRecord.vaccine_name,
-      disease: disease || healthRecord.disease,
-      treatment: treatment || healthRecord.treatment,
-      status: status || healthRecord.status,
-      notes: notes !== undefined ? notes : healthRecord.notes
-    });
+    healthRecord.vaccination_date = vaccination_date || healthRecord.vaccination_date;
+    healthRecord.vaccine_name = vaccine_name || healthRecord.vaccine_name;
+    healthRecord.disease = disease || healthRecord.disease;
+    healthRecord.treatment = treatment || healthRecord.treatment;
+    healthRecord.status = status || healthRecord.status;
+    healthRecord.notes = notes ?? healthRecord.notes;
 
-    const updatedRecord = await HealthRecord.findByPk(healthRecord.health_id, {
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'veterinarian', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    await healthRecord.save();
+
+    const updatedRecord = await HealthRecord.findById(healthRecord._id)
+      .populate('batch_id')
+      .populate('vet_id', 'name role');
 
     res.status(200).json({
       success: true,
@@ -186,7 +170,7 @@ const updateHealthRecord = async (req, res) => {
  */
 const deleteHealthRecord = async (req, res) => {
   try {
-    const healthRecord = await HealthRecord.findByPk(req.params.id);
+    const healthRecord = await HealthRecord.findById(req.params.id);
 
     if (!healthRecord) {
       return res.status(404).json({
@@ -195,7 +179,7 @@ const deleteHealthRecord = async (req, res) => {
       });
     }
 
-    await healthRecord.destroy();
+    await healthRecord.deleteOne();
 
     res.status(200).json({
       success: true,
@@ -218,18 +202,12 @@ const deleteHealthRecord = async (req, res) => {
  */
 const getHealthAlerts = async (req, res) => {
   try {
-    const alerts = await HealthRecord.findAll({
-      where: {
-        status: {
-          [Op.in]: ['Under Treatment', 'Quarantined']
-        }
-      },
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'veterinarian', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['created_at', 'DESC']]
-    });
+    const alerts = await HealthRecord.find({
+      status: { $in: ['Under Treatment', 'Quarantined'] }
+    })
+      .populate('batch_id')
+      .populate('vet_id', 'name role')
+      .sort({ created_at: -1 });
 
     res.status(200).json({
       success: true,

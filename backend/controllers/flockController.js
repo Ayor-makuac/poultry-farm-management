@@ -1,5 +1,4 @@
-const { PoultryBatch, FeedRecord, ProductionRecord, HealthRecord } = require('../models');
-const { Op } = require('sequelize');
+const { PoultryBatch } = require('../models');
 
 /**
  * @desc    Create new poultry batch
@@ -51,30 +50,21 @@ const getFlocks = async (req, res) => {
   try {
     const { status, breed, housing_unit } = req.query;
 
-    // Build filter
-    const where = {};
-    if (status) where.status = status;
-    if (breed) where.breed = { [Op.like]: `%${breed}%` };
-    if (housing_unit) where.housing_unit = housing_unit;
+    const filter = {};
+    if (status) filter.status = status;
+    if (breed) filter.breed = { $regex: breed, $options: 'i' };
+    if (housing_unit) filter.housing_unit = housing_unit;
 
-    const flocks = await PoultryBatch.findAll({
-      where,
-      order: [['created_at', 'DESC']],
-      include: [
-        {
-          model: FeedRecord,
-          as: 'feedRecords',
-          limit: 5,
-          order: [['date', 'DESC']]
-        },
-        {
-          model: ProductionRecord,
-          as: 'productionRecords',
-          limit: 5,
-          order: [['date', 'DESC']]
-        }
-      ]
-    });
+    const flocks = await PoultryBatch.find(filter)
+      .sort({ created_at: -1 })
+      .populate({
+        path: 'feedRecords',
+        options: { sort: { date: -1 }, limit: 5 }
+      })
+      .populate({
+        path: 'productionRecords',
+        options: { sort: { date: -1 }, limit: 5 }
+      });
 
     res.status(200).json({
       success: true,
@@ -98,25 +88,20 @@ const getFlocks = async (req, res) => {
  */
 const getFlock = async (req, res) => {
   try {
-    const flock = await PoultryBatch.findByPk(req.params.id, {
-      include: [
-        {
-          model: FeedRecord,
-          as: 'feedRecords',
-          order: [['date', 'DESC']]
-        },
-        {
-          model: ProductionRecord,
-          as: 'productionRecords',
-          order: [['date', 'DESC']]
-        },
-        {
-          model: HealthRecord,
-          as: 'healthRecords',
-          order: [['created_at', 'DESC']]
-        }
-      ]
-    });
+    const flock = await PoultryBatch.findById(req.params.id)
+      .populate({
+        path: 'feedRecords',
+        options: { sort: { date: -1 } }
+      })
+      .populate({
+        path: 'productionRecords',
+        options: { sort: { date: -1 } }
+      })
+      .populate({
+        path: 'healthRecords',
+        options: { sort: { created_at: -1 } },
+        populate: { path: 'vet_id', select: 'name role' }
+      });
 
     if (!flock) {
       return res.status(404).json({
@@ -148,7 +133,7 @@ const updateFlock = async (req, res) => {
   try {
     const { breed, quantity, age, date_acquired, housing_unit, status } = req.body;
 
-    const flock = await PoultryBatch.findByPk(req.params.id);
+    const flock = await PoultryBatch.findById(req.params.id);
 
     if (!flock) {
       return res.status(404).json({
@@ -157,14 +142,14 @@ const updateFlock = async (req, res) => {
       });
     }
 
-    await flock.update({
-      breed: breed || flock.breed,
-      quantity: quantity !== undefined ? quantity : flock.quantity,
-      age: age !== undefined ? age : flock.age,
-      date_acquired: date_acquired || flock.date_acquired,
-      housing_unit: housing_unit || flock.housing_unit,
-      status: status || flock.status
-    });
+    flock.breed = breed || flock.breed;
+    flock.quantity = quantity ?? flock.quantity;
+    flock.age = age ?? flock.age;
+    flock.date_acquired = date_acquired || flock.date_acquired;
+    flock.housing_unit = housing_unit || flock.housing_unit;
+    flock.status = status || flock.status;
+
+    await flock.save();
 
     res.status(200).json({
       success: true,
@@ -188,7 +173,7 @@ const updateFlock = async (req, res) => {
  */
 const deleteFlock = async (req, res) => {
   try {
-    const flock = await PoultryBatch.findByPk(req.params.id);
+    const flock = await PoultryBatch.findById(req.params.id);
 
     if (!flock) {
       return res.status(404).json({
@@ -197,7 +182,7 @@ const deleteFlock = async (req, res) => {
       });
     }
 
-    await flock.destroy();
+    await flock.deleteOne();
 
     res.status(200).json({
       success: true,
@@ -220,28 +205,31 @@ const deleteFlock = async (req, res) => {
  */
 const getFlockStats = async (req, res) => {
   try {
-    const totalFlocks = await PoultryBatch.count();
-    const activeFlocks = await PoultryBatch.count({ where: { status: 'Active' } });
-    
-    const totalBirds = await PoultryBatch.sum('quantity', {
-      where: { status: 'Active' }
-    });
+    const totalFlocks = await PoultryBatch.countDocuments();
+    const activeFlocks = await PoultryBatch.countDocuments({ status: 'Active' });
 
-    const flocksByStatus = await PoultryBatch.findAll({
-      attributes: [
-        'status',
-        [PoultryBatch.sequelize.fn('COUNT', PoultryBatch.sequelize.col('batch_id')), 'count'],
-        [PoultryBatch.sequelize.fn('SUM', PoultryBatch.sequelize.col('quantity')), 'total_birds']
-      ],
-      group: ['status']
-    });
+    const [totalBirdsAgg] = await PoultryBatch.aggregate([
+      { $match: { status: 'Active' } },
+      { $group: { _id: null, total: { $sum: '$quantity' } } }
+    ]);
+
+    const flocksByStatus = await PoultryBatch.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          total_birds: { $sum: '$quantity' }
+        }
+      },
+      { $project: { status: '$_id', count: 1, total_birds: 1, _id: 0 } }
+    ]);
 
     res.status(200).json({
       success: true,
       data: {
         totalFlocks,
         activeFlocks,
-        totalBirds: totalBirds || 0,
+        totalBirds: totalBirdsAgg?.total || 0,
         flocksByStatus
       }
     });

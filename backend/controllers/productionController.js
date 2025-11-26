@@ -1,5 +1,5 @@
-const { ProductionRecord, PoultryBatch, User } = require('../models');
-const { Op } = require('sequelize');
+const { ProductionRecord, PoultryBatch } = require('../models');
+const { mongoose } = require('../config/database');
 
 /**
  * @desc    Create production record
@@ -19,7 +19,7 @@ const createProductionRecord = async (req, res) => {
     }
 
     // Check if batch exists
-    const batch = await PoultryBatch.findByPk(batch_id);
+    const batch = await PoultryBatch.findById(batch_id);
     if (!batch) {
       return res.status(404).json({
         success: false,
@@ -29,8 +29,9 @@ const createProductionRecord = async (req, res) => {
 
     // Update batch quantity if there's mortality
     if (mortality_count && mortality_count > 0) {
-      const newQuantity = Math.max(0, batch.quantity - mortality_count);
-      await batch.update({ quantity: newQuantity });
+      const newQuantity = Math.max(0, batch.quantity - Number(mortality_count));
+      batch.quantity = newQuantity;
+      await batch.save();
     }
 
     const productionRecord = await ProductionRecord.create({
@@ -42,12 +43,9 @@ const createProductionRecord = async (req, res) => {
       recorded_by: req.user.user_id
     });
 
-    const record = await ProductionRecord.findByPk(productionRecord.production_id, {
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    const record = await ProductionRecord.findById(productionRecord._id)
+      .populate('batch_id')
+      .populate('recorded_by', 'name role');
 
     res.status(201).json({
       success: true,
@@ -73,25 +71,18 @@ const getProductionRecords = async (req, res) => {
   try {
     const { batch_id, start_date, end_date } = req.query;
 
-    // Build filter
-    const where = {};
-    if (batch_id) where.batch_id = batch_id;
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
-    } else if (start_date) {
-      where.date = { [Op.gte]: start_date };
-    } else if (end_date) {
-      where.date = { [Op.lte]: end_date };
+    const filter = {};
+    if (batch_id) filter.batch_id = batch_id;
+    if (start_date || end_date) {
+      filter.date = {};
+      if (start_date) filter.date.$gte = new Date(start_date);
+      if (end_date) filter.date.$lte = new Date(end_date);
     }
 
-    const productionRecords = await ProductionRecord.findAll({
-      where,
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['date', 'DESC']]
-    });
+    const productionRecords = await ProductionRecord.find(filter)
+      .populate('batch_id')
+      .populate('recorded_by', 'name role')
+      .sort({ date: -1 });
 
     res.status(200).json({
       success: true,
@@ -115,23 +106,22 @@ const getProductionRecords = async (req, res) => {
  */
 const getBatchProductionRecords = async (req, res) => {
   try {
-    const productionRecords = await ProductionRecord.findAll({
-      where: { batch_id: req.params.batchId },
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ],
-      order: [['date', 'DESC']]
-    });
+    const productionRecords = await ProductionRecord.find({ batch_id: req.params.batchId })
+      .populate('batch_id')
+      .populate('recorded_by', 'name role')
+      .sort({ date: -1 });
 
-    // Calculate totals
-    const totalEggs = await ProductionRecord.sum('eggs_collected', {
-      where: { batch_id: req.params.batchId }
-    });
-
-    const totalMortality = await ProductionRecord.sum('mortality_count', {
-      where: { batch_id: req.params.batchId }
-    });
+    const match = { batch_id: new mongoose.Types.ObjectId(req.params.batchId) };
+    const [totals] = await ProductionRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalEggs: { $sum: '$eggs_collected' },
+          totalMortality: { $sum: '$mortality_count' }
+        }
+      }
+    ]);
 
     res.status(200).json({
       success: true,
@@ -159,41 +149,65 @@ const getProductionStats = async (req, res) => {
   try {
     const { start_date, end_date } = req.query;
 
-    const where = {};
-    if (start_date && end_date) {
-      where.date = { [Op.between]: [start_date, end_date] };
+    const match = {};
+    if (start_date || end_date) {
+      match.date = {};
+      if (start_date) match.date.$gte = new Date(start_date);
+      if (end_date) match.date.$lte = new Date(end_date);
     }
 
-    const totalEggs = await ProductionRecord.sum('eggs_collected', { where });
-    const totalMortality = await ProductionRecord.sum('mortality_count', { where });
-    const recordCount = await ProductionRecord.count({ where });
+    const [summary] = await ProductionRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          totalEggs: { $sum: '$eggs_collected' },
+          totalMortality: { $sum: '$mortality_count' },
+          recordCount: { $sum: 1 }
+        }
+      }
+    ]);
 
-    // Average eggs per day
-    const avgEggsPerDay = recordCount > 0 ? (totalEggs / recordCount).toFixed(2) : 0;
+    const productionByBatch = await ProductionRecord.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$batch_id',
+          total_eggs: { $sum: '$eggs_collected' },
+          total_mortality: { $sum: '$mortality_count' },
+          record_count: { $sum: 1 }
+        }
+      }
+    ]);
 
-    // Production by batch
-    const productionByBatch = await ProductionRecord.findAll({
-      where,
-      attributes: [
-        'batch_id',
-        [ProductionRecord.sequelize.fn('SUM', ProductionRecord.sequelize.col('eggs_collected')), 'total_eggs'],
-        [ProductionRecord.sequelize.fn('SUM', ProductionRecord.sequelize.col('mortality_count')), 'total_mortality'],
-        [ProductionRecord.sequelize.fn('COUNT', ProductionRecord.sequelize.col('production_id')), 'record_count']
-      ],
-      include: [
-        { model: PoultryBatch, as: 'batch', attributes: ['batch_id', 'breed', 'quantity'] }
-      ],
-      group: ['batch_id']
+    const batchLookup = await PoultryBatch.find({
+      _id: { $in: productionByBatch.map(item => item._id) }
+    }).select('batch_id breed quantity');
+
+    const batchMap = batchLookup.reduce((acc, batch) => {
+      acc[batch._id.toString()] = batch;
+      return acc;
+    }, {});
+
+    const productionByBatchWithDetails = productionByBatch.map(item => {
+      const batchIdString = item._id?.toString();
+      return {
+        batch_id: batchIdString,
+      total_eggs: item.total_eggs,
+      total_mortality: item.total_mortality,
+      record_count: item.record_count,
+        batch: batchMap[batchIdString] || null
+      };
     });
 
     res.status(200).json({
       success: true,
       data: {
-        totalEggs: totalEggs || 0,
-        totalMortality: totalMortality || 0,
-        recordCount,
-        avgEggsPerDay,
-        productionByBatch
+        totalEggs: summary?.totalEggs || 0,
+        totalMortality: summary?.totalMortality || 0,
+        recordCount: summary?.recordCount || 0,
+        avgEggsPerDay: summary?.recordCount ? Number((summary.totalEggs / summary.recordCount).toFixed(2)) : 0,
+        productionByBatch: productionByBatchWithDetails
       }
     });
   } catch (error) {
@@ -215,7 +229,7 @@ const updateProductionRecord = async (req, res) => {
   try {
     const { eggs_collected, mortality_count, date, notes } = req.body;
 
-    const productionRecord = await ProductionRecord.findByPk(req.params.id);
+    const productionRecord = await ProductionRecord.findById(req.params.id);
 
     if (!productionRecord) {
       return res.status(404).json({
@@ -224,19 +238,16 @@ const updateProductionRecord = async (req, res) => {
       });
     }
 
-    await productionRecord.update({
-      eggs_collected: eggs_collected !== undefined ? eggs_collected : productionRecord.eggs_collected,
-      mortality_count: mortality_count !== undefined ? mortality_count : productionRecord.mortality_count,
-      date: date || productionRecord.date,
-      notes: notes !== undefined ? notes : productionRecord.notes
-    });
+    productionRecord.eggs_collected = eggs_collected ?? productionRecord.eggs_collected;
+    productionRecord.mortality_count = mortality_count ?? productionRecord.mortality_count;
+    productionRecord.date = date || productionRecord.date;
+    productionRecord.notes = notes ?? productionRecord.notes;
 
-    const updatedRecord = await ProductionRecord.findByPk(productionRecord.production_id, {
-      include: [
-        { model: PoultryBatch, as: 'batch' },
-        { model: User, as: 'recorder', attributes: ['user_id', 'name', 'role'] }
-      ]
-    });
+    await productionRecord.save();
+
+    const updatedRecord = await ProductionRecord.findById(productionRecord._id)
+      .populate('batch_id')
+      .populate('recorded_by', 'name role');
 
     res.status(200).json({
       success: true,
@@ -260,7 +271,7 @@ const updateProductionRecord = async (req, res) => {
  */
 const deleteProductionRecord = async (req, res) => {
   try {
-    const productionRecord = await ProductionRecord.findByPk(req.params.id);
+    const productionRecord = await ProductionRecord.findById(req.params.id);
 
     if (!productionRecord) {
       return res.status(404).json({
@@ -269,7 +280,7 @@ const deleteProductionRecord = async (req, res) => {
       });
     }
 
-    await productionRecord.destroy();
+    await productionRecord.deleteOne();
 
     res.status(200).json({
       success: true,

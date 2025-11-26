@@ -33,7 +33,7 @@ npm install
 ```
 
 2. **Configure Test Database**:
-   - Create a separate test database in MySQL
+   - Create a separate MongoDB database/cluster for tests
    - Update `.env` file with test database credentials:
    ```
    DB_NAME=poultry_farm_test

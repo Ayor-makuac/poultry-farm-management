@@ -31,8 +31,7 @@ The Poultry Farm Management System is a comprehensive full-stack web application
 
 **Backend:**
 - Node.js & Express.js
-- MySQL Database
-- Sequelize ORM
+- MongoDB with Mongoose ODM
 - JWT Authentication
 - bcrypt Password Hashing
 
@@ -56,7 +55,7 @@ The Poultry Farm Management System is a comprehensive full-stack web application
 
 ### ✅ PHASE 1: Database & Setup (100%)
 
-**Database Schema (9 Tables):**
+**Database Schema (9 Collections):**
 1. users - User authentication and roles
 2. poultry_batches - Flock information
 3. feed_records - Feeding tracking
@@ -360,15 +359,15 @@ Poultry Farm/
 ## 🚀 How to Run the Application
 
 ### Prerequisites
-- Node.js (v14+)
-- MySQL (v5.7+)
+- Node.js (v18+)
+- MongoDB (local instance or hosted)
 - npm or yarn
 
 ### Backend Setup
 ```bash
 cd backend
 npm install
-npm run setup  # Create database
+npm run setup  # Optional: verify MongoDB connectivity
 npm run dev    # Start server
 ```
 
@@ -408,7 +407,7 @@ Register a new user or use:
 3. **Database Management**
    - Schema design
    - Relationships and foreign keys
-   - ORM usage (Sequelize)
+   - ODM usage (Mongoose)
    - Data validation
 
 4. **API Development**
