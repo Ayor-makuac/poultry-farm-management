@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+# package-lock.json - Keep this for consistent deployments
 
 # Environment variables
 .env
@@ -21,4 +21,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Database exports (may contain sensitive data)
+scripts/database_export.sql
 
