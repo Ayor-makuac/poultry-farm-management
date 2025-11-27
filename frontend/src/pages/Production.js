@@ -223,19 +223,24 @@ const Production = () => {
                 required
               >
                 <option value="">Select Flock</option>
-                {flocks.filter(f => f.status === 'Active').map(flock => {
+                {Array.isArray(flocks) ? flocks.filter(f => {
+                  // Ensure status is a string before comparing
+                  if (!f || typeof f !== 'object') return false;
+                  const statusStr = f.status ? String(f.status) : '';
+                  return statusStr === 'Active';
+                }).map((flock, index) => {
                   // Ensure batch_id is always a string
-                  const flockBatchId = flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
-                  const flockKey = flockBatchId || (flock._id ? String(flock._id) : Math.random().toString());
-                  const breedDisplay = flock.breed ? String(flock.breed) : 'Unknown';
-                  const quantityDisplay = flock.quantity ? String(flock.quantity) : '0';
+                  const flockBatchId = flock && flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
+                  const flockKey = flockBatchId || (flock && flock._id ? String(flock._id) : `flock-${index}`);
+                  const breedDisplay = flock && flock.breed ? String(flock.breed) : 'Unknown';
+                  const quantityDisplay = flock && flock.quantity ? String(flock.quantity) : '0';
                   
                   return (
                     <option key={flockKey} value={flockBatchId}>
                       {breedDisplay} - {quantityDisplay} birds
                     </option>
                   );
-                })}
+                }) : []}
               </select>
             </div>
             <Input
