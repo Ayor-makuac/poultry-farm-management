@@ -28,9 +28,12 @@ const Expenses = () => {
   const fetchExpenses = async () => {
     try {
       const response = await expenseService.getExpenses();
-      setRecords(response.data || []);
+      const records = response?.data || response || [];
+      setRecords(Array.isArray(records) ? records : []);
     } catch (error) {
+      console.error('Error fetching expenses data:', error);
       toast.error('Failed to fetch expenses');
+      setRecords([]);
     } finally {
       setLoading(false);
     }
@@ -44,7 +47,13 @@ const Expenses = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        await expenseService.updateExpense(editingRecord.expense_id, formData);
+        const updateId = editingRecord.expense_id || editingRecord._id;
+        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
+        if (!updateIdString) {
+          toast.error('Unable to identify record to update');
+          return;
+        }
+        await expenseService.updateExpense(updateIdString, formData);
         toast.success('Expense record updated successfully');
       } else {
         await expenseService.createExpense(formData);
@@ -115,8 +124,13 @@ const Expenses = () => {
         </div>
 
         <div className="flocks-grid">
-          {records.map((record) => (
-            <Card key={record.expense_id} className="flock-card">
+          {records.map((record) => {
+            // Ensure key is always a string
+            const recordKey = record.expense_id || record._id;
+            const recordKeyString = recordKey ? (typeof recordKey === 'object' ? String(recordKey._id || recordKey) : String(recordKey)) : Math.random().toString();
+            
+            return (
+            <Card key={recordKeyString} className="flock-card">
               <div className="flock-header">
                 <h3>{record.category}</h3>
                 <span className="status-badge status-active">
@@ -143,12 +157,17 @@ const Expenses = () => {
                 <Button onClick={() => handleEdit(record)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(record.expense_id)} variant="danger" size="small">
+                <Button onClick={() => {
+                  const deleteId = record.expense_id || record._id;
+                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
+                  if (deleteIdString) handleDelete(deleteIdString);
+                }} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {records.length === 0 && (

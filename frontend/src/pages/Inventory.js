@@ -30,9 +30,12 @@ const Inventory = () => {
   const fetchItems = async () => {
     try {
       const response = await inventoryService.getInventory();
-      setItems(response.data || []);
+      const items = response?.data || response || [];
+      setItems(Array.isArray(items) ? items : []);
     } catch (error) {
+      console.error('Error fetching inventory data:', error);
       toast.error('Failed to fetch inventory');
+      setItems([]);
     } finally {
       setLoading(false);
     }
@@ -46,7 +49,13 @@ const Inventory = () => {
     e.preventDefault();
     try {
       if (editingItem) {
-        await inventoryService.updateInventory(editingItem.inventory_id, formData);
+        const updateId = editingItem.inventory_id || editingItem._id;
+        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
+        if (!updateIdString) {
+          toast.error('Unable to identify item to update');
+          return;
+        }
+        await inventoryService.updateInventory(updateIdString, formData);
         toast.success('Inventory item updated successfully');
       } else {
         await inventoryService.createInventory(formData);
@@ -125,8 +134,13 @@ const Inventory = () => {
         </div>
 
         <div className="flocks-grid">
-          {items.map((item) => (
-            <Card key={item.inventory_id} className={`flock-card ${isLowStock(item) ? 'low-stock' : ''}`}>
+          {items.map((item) => {
+            // Ensure key is always a string
+            const itemKey = item.inventory_id || item._id;
+            const itemKeyString = itemKey ? (typeof itemKey === 'object' ? String(itemKey._id || itemKey) : String(itemKey)) : Math.random().toString();
+            
+            return (
+            <Card key={itemKeyString} className={`flock-card ${isLowStock(item) ? 'low-stock' : ''}`}>
               <div className="flock-header">
                 <h3>{item.item_name}</h3>
                 <span className={`status-badge ${isLowStock(item) ? 'status-danger' : 'status-active'}`}>
@@ -164,12 +178,17 @@ const Inventory = () => {
                 <Button onClick={() => handleEdit(item)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(item.inventory_id)} variant="danger" size="small">
+                <Button onClick={() => {
+                  const deleteId = item.inventory_id || item._id;
+                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
+                  if (deleteIdString) handleDelete(deleteIdString);
+                }} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {items.length === 0 && (

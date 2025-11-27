@@ -32,10 +32,15 @@ const Feeding = () => {
         feedingService.getFeeding(),
         flockService.getFlocks()
       ]);
-      setRecords(feedingRes.data || []);
-      setFlocks(flocksRes.data || []);
+      const records = feedingRes?.data || feedingRes || [];
+      setRecords(Array.isArray(records) ? records : []);
+      const flocks = flocksRes?.data || flocksRes || [];
+      setFlocks(Array.isArray(flocks) ? flocks : []);
     } catch (error) {
+      console.error('Error fetching feeding data:', error);
       toast.error('Failed to fetch data');
+      setRecords([]);
+      setFlocks([]);
     } finally {
       setLoading(false);
     }
@@ -49,7 +54,13 @@ const Feeding = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        await feedingService.updateFeeding(editingRecord.feed_id, formData);
+        const updateId = editingRecord.feed_id || editingRecord._id;
+        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
+        if (!updateIdString) {
+          toast.error('Unable to identify record to update');
+          return;
+        }
+        await feedingService.updateFeeding(updateIdString, formData);
         toast.success('Feeding record updated successfully');
       } else {
         await feedingService.createFeeding(formData);
@@ -64,10 +75,20 @@ const Feeding = () => {
 
   const handleEdit = (record) => {
     setEditingRecord(record);
+    // Handle populated batch_id (could be object or string)
+    let batchId = '';
+    if (record.batch_id) {
+      if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+        batchId = String(record.batch_id._id || record.batch_id.batch_id || '');
+      } else {
+        batchId = String(record.batch_id);
+      }
+    }
+    
     setFormData({
-      batch_id: record.batch_id,
-      feed_type: record.feed_type,
-      quantity: record.quantity,
+      batch_id: batchId,
+      feed_type: record.feed_type || '',
+      quantity: record.quantity || '',
       unit: record.unit || 'kg',
       date: record.date ? new Date(record.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
     });
@@ -120,10 +141,24 @@ const Feeding = () => {
         </div>
 
         <div className="flocks-grid">
-          {records.map((record) => (
-            <Card key={record.feed_id} className="flock-card">
+          {records.map((record) => {
+            // Handle populated batch_id (could be object or string)
+            let batchDisplay = 'N/A';
+            if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+              batchDisplay = record.batch_id.batch_id || record.batch_id._id || 'N/A';
+            } else if (record.batch_id) {
+              batchDisplay = String(record.batch_id);
+            }
+            batchDisplay = batchDisplay ? String(batchDisplay) : 'N/A';
+            
+            // Ensure key is always a string
+            const recordKey = record.feed_id || record._id;
+            const recordKeyString = recordKey ? (typeof recordKey === 'object' ? String(recordKey._id || recordKey) : String(recordKey)) : Math.random().toString();
+            
+            return (
+            <Card key={recordKeyString} className="flock-card">
               <div className="flock-header">
-                <h3>{record.feed_type}</h3>
+                <h3>{record.feed_type ? String(record.feed_type) : 'Unknown'}</h3>
                 <span className="status-badge status-active">
                   {new Date(record.date).toLocaleDateString()}
                 </span>
@@ -131,7 +166,7 @@ const Feeding = () => {
               <div className="flock-details">
                 <div className="detail-row">
                   <span className="label">Batch:</span>
-                  <span className="value">#{record.batch_id}</span>
+                  <span className="value">#{batchDisplay}</span>
                 </div>
                 <div className="detail-row">
                   <span className="label">Quantity:</span>
@@ -142,12 +177,17 @@ const Feeding = () => {
                 <Button onClick={() => handleEdit(record)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(record.feed_id)} variant="danger" size="small">
+                <Button onClick={() => {
+                  const deleteId = record.feed_id || record._id;
+                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
+                  if (deleteIdString) handleDelete(deleteIdString);
+                }} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {records.length === 0 && (
@@ -166,17 +206,25 @@ const Feeding = () => {
               <label>Flock/Batch *</label>
               <select
                 name="batch_id"
-                value={formData.batch_id}
+                value={formData.batch_id ? (typeof formData.batch_id === 'object' ? String(formData.batch_id._id || formData.batch_id.batch_id || formData.batch_id) : String(formData.batch_id)) : ''}
                 onChange={handleInputChange}
                 className="input-field"
                 required
               >
                 <option value="">Select Flock</option>
-                {flocks.filter(f => f.status === 'Active').map(flock => (
-                  <option key={flock.batch_id} value={flock.batch_id}>
-                    {flock.breed} - {flock.quantity} birds
-                  </option>
-                ))}
+                {flocks.filter(f => f.status === 'Active').map(flock => {
+                  // Ensure batch_id is always a string
+                  const flockBatchId = flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
+                  const flockKey = flockBatchId || (flock._id ? String(flock._id) : Math.random().toString());
+                  const breedDisplay = flock.breed ? String(flock.breed) : 'Unknown';
+                  const quantityDisplay = flock.quantity ? String(flock.quantity) : '0';
+                  
+                  return (
+                    <option key={flockKey} value={flockBatchId}>
+                      {breedDisplay} - {quantityDisplay} birds
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <Input

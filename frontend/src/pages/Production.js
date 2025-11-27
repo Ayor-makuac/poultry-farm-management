@@ -32,10 +32,15 @@ const Production = () => {
         productionService.getProduction(),
         flockService.getFlocks()
       ]);
-      setRecords(productionRes.data || []);
-      setFlocks(flocksRes.data || []);
+      const records = productionRes?.data || productionRes || [];
+      setRecords(Array.isArray(records) ? records : []);
+      const flocks = flocksRes?.data || flocksRes || [];
+      setFlocks(Array.isArray(flocks) ? flocks : []);
     } catch (error) {
+      console.error('Error fetching production data:', error);
       toast.error('Failed to fetch data');
+      setRecords([]);
+      setFlocks([]);
     } finally {
       setLoading(false);
     }
@@ -49,7 +54,13 @@ const Production = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        await productionService.updateProduction(editingRecord.production_id, formData);
+        const updateId = editingRecord.production_id || editingRecord._id;
+        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
+        if (!updateIdString) {
+          toast.error('Unable to identify record to update');
+          return;
+        }
+        await productionService.updateProduction(updateIdString, formData);
         toast.success('Production record updated successfully');
       } else {
         await productionService.createProduction(formData);
@@ -64,9 +75,19 @@ const Production = () => {
 
   const handleEdit = (record) => {
     setEditingRecord(record);
+    // Handle populated batch_id (could be object or string)
+    let batchId = '';
+    if (record.batch_id) {
+      if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+        batchId = String(record.batch_id._id || record.batch_id.batch_id || '');
+      } else {
+        batchId = String(record.batch_id);
+      }
+    }
+    
     setFormData({
-      batch_id: record.batch_id,
-      eggs_collected: record.eggs_collected,
+      batch_id: batchId,
+      eggs_collected: record.eggs_collected || '',
       mortality_count: record.mortality_count || '0',
       date: record.date ? new Date(record.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       notes: record.notes || ''
@@ -120,10 +141,29 @@ const Production = () => {
         </div>
 
         <div className="flocks-grid">
-          {records.map((record) => (
-            <Card key={record.production_id} className="flock-card">
+          {records.map((record) => {
+            // Handle populated batch_id (could be object or string)
+            let batchId = record.batch_id;
+            let batchDisplay = 'N/A';
+            
+            if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+              batchId = record.batch_id._id || record.batch_id.batch_id || null;
+              batchDisplay = record.batch_id.batch_id || record.batch_id._id || 'N/A';
+            } else if (record.batch_id) {
+              batchDisplay = String(record.batch_id);
+            }
+            
+            // Ensure batchDisplay is always a string
+            batchDisplay = batchDisplay ? String(batchDisplay) : 'N/A';
+            
+            // Ensure key is always a string
+            const recordKey = record.production_id || record._id;
+            const recordKeyString = recordKey ? (typeof recordKey === 'object' ? String(recordKey._id || recordKey) : String(recordKey)) : Math.random().toString();
+            
+            return (
+            <Card key={recordKeyString} className="flock-card">
               <div className="flock-header">
-                <h3>Batch #{record.batch_id}</h3>
+                <h3>Batch #{batchDisplay}</h3>
                 <span className="status-badge status-active">
                   {new Date(record.date).toLocaleDateString()}
                 </span>
@@ -148,12 +188,17 @@ const Production = () => {
                 <Button onClick={() => handleEdit(record)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(record.production_id)} variant="danger" size="small">
+                <Button onClick={() => {
+                  const deleteId = record.production_id || record._id;
+                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
+                  if (deleteIdString) handleDelete(deleteIdString);
+                }} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {records.length === 0 && (
@@ -172,17 +217,25 @@ const Production = () => {
               <label>Flock/Batch *</label>
               <select
                 name="batch_id"
-                value={formData.batch_id}
+                value={formData.batch_id ? (typeof formData.batch_id === 'object' ? String(formData.batch_id._id || formData.batch_id.batch_id || formData.batch_id) : String(formData.batch_id)) : ''}
                 onChange={handleInputChange}
                 className="input-field"
                 required
               >
                 <option value="">Select Flock</option>
-                {flocks.filter(f => f.status === 'Active').map(flock => (
-                  <option key={flock.batch_id} value={flock.batch_id}>
-                    {flock.breed} - {flock.quantity} birds
-                  </option>
-                ))}
+                {flocks.filter(f => f.status === 'Active').map(flock => {
+                  // Ensure batch_id is always a string
+                  const flockBatchId = flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
+                  const flockKey = flockBatchId || (flock._id ? String(flock._id) : Math.random().toString());
+                  const breedDisplay = flock.breed ? String(flock.breed) : 'Unknown';
+                  const quantityDisplay = flock.quantity ? String(flock.quantity) : '0';
+                  
+                  return (
+                    <option key={flockKey} value={flockBatchId}>
+                      {breedDisplay} - {quantityDisplay} birds
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <Input

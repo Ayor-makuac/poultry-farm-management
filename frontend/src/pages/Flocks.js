@@ -35,9 +35,12 @@ const Flocks = () => {
   const fetchFlocks = async () => {
     try {
       const response = await flockService.getFlocks();
-      setFlocks(response.data || []);
+      const flocks = response?.data || response || [];
+      setFlocks(Array.isArray(flocks) ? flocks : []);
     } catch (error) {
+      console.error('Error fetching flocks data:', error);
       toast.error('Failed to fetch flocks');
+      setFlocks([]);
     } finally {
       setLoading(false);
     }
@@ -51,7 +54,13 @@ const Flocks = () => {
     e.preventDefault();
     try {
       if (editingFlock) {
-        await flockService.updateFlock(editingFlock.batch_id, formData);
+        const updateId = editingFlock.batch_id || editingFlock._id;
+        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId.batch_id || updateId) : String(updateId)) : '';
+        if (!updateIdString) {
+          toast.error('Unable to identify flock to update');
+          return;
+        }
+        await flockService.updateFlock(updateIdString, formData);
         toast.success('Flock updated successfully');
       } else {
         await flockService.createFlock(formData);
@@ -167,8 +176,13 @@ const Flocks = () => {
         </div>
 
         <div className="flocks-grid">
-          {paginatedFlocks.map((flock) => (
-            <Card key={flock.batch_id} className="flock-card">
+          {paginatedFlocks.map((flock) => {
+            // Ensure key is always a string
+            const flockKey = flock.batch_id || flock._id;
+            const flockKeyString = flockKey ? (typeof flockKey === 'object' ? String(flockKey._id || flockKey.batch_id || flockKey) : String(flockKey)) : Math.random().toString();
+            
+            return (
+            <Card key={flockKeyString} className="flock-card">
               <div className="flock-header">
                 <h3>{flock.breed}</h3>
                 <span className={`status-badge status-${flock.status.toLowerCase()}`}>
@@ -197,12 +211,17 @@ const Flocks = () => {
                 <Button onClick={() => handleEdit(flock)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(flock.batch_id)} variant="danger" size="small">
+                <Button onClick={() => {
+                  const deleteId = flock.batch_id || flock._id;
+                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId.batch_id || deleteId) : String(deleteId)) : '';
+                  if (deleteIdString) handleDelete(deleteIdString);
+                }} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {filteredFlocks.length === 0 && (
