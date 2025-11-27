@@ -6,6 +6,7 @@ import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
+import { safeString, safeId, safeArray } from '../utils/safeRender';
 import './Flocks.css';
 
 const Production = () => {
@@ -55,13 +56,12 @@ const Production = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        const updateId = editingRecord.production_id || editingRecord._id;
-        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
-        if (!updateIdString) {
+        const updateId = safeId(editingRecord.production_id || editingRecord._id, '');
+        if (!updateId) {
           toast.error('Unable to identify record to update');
           return;
         }
-        await productionService.updateProduction(updateIdString, formData);
+        await productionService.updateProduction(updateId, formData);
         toast.success('Production record updated successfully');
       } else {
         await productionService.createProduction(formData);
@@ -76,22 +76,12 @@ const Production = () => {
 
   const handleEdit = (record) => {
     setEditingRecord(record);
-    // Handle populated batch_id (could be object or string)
-    let batchId = '';
-    if (record.batch_id) {
-      if (typeof record.batch_id === 'object' && record.batch_id !== null) {
-        batchId = String(record.batch_id._id || record.batch_id.batch_id || '');
-      } else {
-        batchId = String(record.batch_id);
-      }
-    }
-    
     setFormData({
-      batch_id: batchId,
-      eggs_collected: record.eggs_collected || '',
-      mortality_count: record.mortality_count || '0',
+      batch_id: safeId(record.batch_id, ''),
+      eggs_collected: safeString(record.eggs_collected, ''),
+      mortality_count: safeString(record.mortality_count, '0'),
       date: record.date ? new Date(record.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      notes: record.notes || ''
+      notes: safeString(record.notes, '')
     });
     setShowModal(true);
   };
@@ -122,18 +112,18 @@ const Production = () => {
 
   // Pre-process active flocks to ensure they're always strings
   const activeFlocks = useMemo(() => {
-    if (!Array.isArray(flocks)) return [];
-    return flocks
+    const validFlocks = safeArray(flocks);
+    return validFlocks
       .filter(f => {
         if (!f || typeof f !== 'object' || Array.isArray(f)) return false;
-        const statusStr = f.status ? String(f.status) : '';
+        const statusStr = safeString(f.status, '');
         return statusStr === 'Active';
       })
       .map(flock => ({
-        batch_id: flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '',
-        _id: flock._id ? String(flock._id) : '',
-        breed: flock.breed ? String(flock.breed) : 'Unknown',
-        quantity: flock.quantity ? String(flock.quantity) : '0'
+        batch_id: safeId(flock.batch_id, ''),
+        _id: safeId(flock._id, ''),
+        breed: safeString(flock.breed, 'Unknown'),
+        quantity: safeString(flock.quantity, '0')
       }));
   }, [flocks]);
 
@@ -159,46 +149,36 @@ const Production = () => {
         </div>
 
         <div className="flocks-grid">
-          {records.map((record) => {
-            // Handle populated batch_id (could be object or string)
-            let batchId = record.batch_id;
-            let batchDisplay = 'N/A';
-            
-            if (typeof record.batch_id === 'object' && record.batch_id !== null) {
-              batchId = record.batch_id._id || record.batch_id.batch_id || null;
-              batchDisplay = record.batch_id.batch_id || record.batch_id._id || 'N/A';
-            } else if (record.batch_id) {
-              batchDisplay = String(record.batch_id);
-            }
-            
-            // Ensure batchDisplay is always a string
-            batchDisplay = batchDisplay ? String(batchDisplay) : 'N/A';
-            
-            // Ensure key is always a string
-            const recordKey = record.production_id || record._id;
-            const recordKeyString = recordKey ? (typeof recordKey === 'object' ? String(recordKey._id || recordKey) : String(recordKey)) : Math.random().toString();
+          {safeArray(records).map((record, index) => {
+            // Use safeString for all values
+            const batchDisplay = safeString(record.batch_id, 'N/A');
+            const recordKey = safeId(record.production_id || record._id, `prod-${index}`);
+            const eggsCollected = safeString(record.eggs_collected, '0');
+            const mortalityCount = safeString(record.mortality_count, '0');
+            const notes = safeString(record.notes, '');
+            const dateStr = record.date ? new Date(record.date).toLocaleDateString() : 'N/A';
             
             return (
-            <Card key={recordKeyString} className="flock-card">
+            <Card key={recordKey} className="flock-card">
               <div className="flock-header">
                 <h3>Batch #{batchDisplay}</h3>
                 <span className="status-badge status-active">
-                  {new Date(record.date).toLocaleDateString()}
+                  {dateStr}
                 </span>
               </div>
               <div className="flock-details">
                 <div className="detail-row">
                   <span className="label">Eggs Collected:</span>
-                  <span className="value">{record.eggs_collected}</span>
+                  <span className="value">{eggsCollected}</span>
                 </div>
                 <div className="detail-row">
                   <span className="label">Mortality:</span>
-                  <span className="value">{record.mortality_count}</span>
+                  <span className="value">{mortalityCount}</span>
                 </div>
-                {record.notes && (
+                {notes && (
                   <div className="detail-row">
                     <span className="label">Notes:</span>
-                    <span className="value">{record.notes}</span>
+                    <span className="value">{notes}</span>
                   </div>
                 )}
               </div>
@@ -207,9 +187,8 @@ const Production = () => {
                   Edit
                 </Button>
                 <Button onClick={() => {
-                  const deleteId = record.production_id || record._id;
-                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
-                  if (deleteIdString) handleDelete(deleteIdString);
+                  const deleteId = safeId(record.production_id || record._id, '');
+                  if (deleteId) handleDelete(deleteId);
                 }} variant="danger" size="small">
                   Delete
                 </Button>
@@ -235,7 +214,7 @@ const Production = () => {
               <label>Flock/Batch *</label>
               <select
                 name="batch_id"
-                value={formData.batch_id ? (typeof formData.batch_id === 'object' ? String(formData.batch_id._id || formData.batch_id.batch_id || formData.batch_id) : String(formData.batch_id)) : ''}
+                value={safeId(formData.batch_id, '')}
                 onChange={handleInputChange}
                 className="input-field"
                 required

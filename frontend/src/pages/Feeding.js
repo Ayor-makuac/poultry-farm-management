@@ -6,6 +6,7 @@ import Card from '../components/common/Card';
 import Button from '../components/common/Button';
 import Input from '../components/common/Input';
 import Modal from '../components/common/Modal';
+import { safeString, safeId, safeArray } from '../utils/safeRender';
 import './Flocks.css';
 
 const Feeding = () => {
@@ -55,13 +56,12 @@ const Feeding = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        const updateId = editingRecord.feed_id || editingRecord._id;
-        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
-        if (!updateIdString) {
+        const updateId = safeId(editingRecord.feed_id || editingRecord._id, '');
+        if (!updateId) {
           toast.error('Unable to identify record to update');
           return;
         }
-        await feedingService.updateFeeding(updateIdString, formData);
+        await feedingService.updateFeeding(updateId, formData);
         toast.success('Feeding record updated successfully');
       } else {
         await feedingService.createFeeding(formData);
@@ -76,21 +76,11 @@ const Feeding = () => {
 
   const handleEdit = (record) => {
     setEditingRecord(record);
-    // Handle populated batch_id (could be object or string)
-    let batchId = '';
-    if (record.batch_id) {
-      if (typeof record.batch_id === 'object' && record.batch_id !== null) {
-        batchId = String(record.batch_id._id || record.batch_id.batch_id || '');
-      } else {
-        batchId = String(record.batch_id);
-      }
-    }
-    
     setFormData({
-      batch_id: batchId,
-      feed_type: record.feed_type || '',
-      quantity: record.quantity || '',
-      unit: record.unit || 'kg',
+      batch_id: safeId(record.batch_id, ''),
+      feed_type: safeString(record.feed_type, ''),
+      quantity: safeString(record.quantity, ''),
+      unit: safeString(record.unit, 'kg'),
       date: record.date ? new Date(record.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
     });
     setShowModal(true);
@@ -122,18 +112,18 @@ const Feeding = () => {
 
   // Pre-process active flocks to ensure they're always strings
   const activeFlocks = useMemo(() => {
-    if (!Array.isArray(flocks)) return [];
-    return flocks
+    const validFlocks = safeArray(flocks);
+    return validFlocks
       .filter(f => {
         if (!f || typeof f !== 'object' || Array.isArray(f)) return false;
-        const statusStr = f.status ? String(f.status) : '';
+        const statusStr = safeString(f.status, '');
         return statusStr === 'Active';
       })
       .map(flock => ({
-        batch_id: flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '',
-        _id: flock._id ? String(flock._id) : '',
-        breed: flock.breed ? String(flock.breed) : 'Unknown',
-        quantity: flock.quantity ? String(flock.quantity) : '0'
+        batch_id: safeId(flock.batch_id, ''),
+        _id: safeId(flock._id, ''),
+        breed: safeString(flock.breed, 'Unknown'),
+        quantity: safeString(flock.quantity, '0')
       }));
   }, [flocks]);
 
@@ -159,26 +149,21 @@ const Feeding = () => {
         </div>
 
         <div className="flocks-grid">
-          {records.map((record) => {
-            // Handle populated batch_id (could be object or string)
-            let batchDisplay = 'N/A';
-            if (typeof record.batch_id === 'object' && record.batch_id !== null) {
-              batchDisplay = record.batch_id.batch_id || record.batch_id._id || 'N/A';
-            } else if (record.batch_id) {
-              batchDisplay = String(record.batch_id);
-            }
-            batchDisplay = batchDisplay ? String(batchDisplay) : 'N/A';
-            
-            // Ensure key is always a string
-            const recordKey = record.feed_id || record._id;
-            const recordKeyString = recordKey ? (typeof recordKey === 'object' ? String(recordKey._id || recordKey) : String(recordKey)) : Math.random().toString();
+          {safeArray(records).map((record, index) => {
+            // Use safeString for all values
+            const batchDisplay = safeString(record.batch_id, 'N/A');
+            const recordKey = safeId(record.feed_id || record._id, `feed-${index}`);
+            const feedType = safeString(record.feed_type, 'Unknown');
+            const quantity = safeString(record.quantity, '0');
+            const unit = safeString(record.unit, '');
+            const dateStr = record.date ? new Date(record.date).toLocaleDateString() : 'N/A';
             
             return (
-            <Card key={recordKeyString} className="flock-card">
+            <Card key={recordKey} className="flock-card">
               <div className="flock-header">
-                <h3>{record.feed_type ? String(record.feed_type) : 'Unknown'}</h3>
+                <h3>{feedType}</h3>
                 <span className="status-badge status-active">
-                  {new Date(record.date).toLocaleDateString()}
+                  {dateStr}
                 </span>
               </div>
               <div className="flock-details">
@@ -188,7 +173,7 @@ const Feeding = () => {
                 </div>
                 <div className="detail-row">
                   <span className="label">Quantity:</span>
-                  <span className="value">{record.quantity} {record.unit}</span>
+                  <span className="value">{quantity} {unit}</span>
                 </div>
               </div>
               <div className="flock-actions">
@@ -196,9 +181,8 @@ const Feeding = () => {
                   Edit
                 </Button>
                 <Button onClick={() => {
-                  const deleteId = record.feed_id || record._id;
-                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
-                  if (deleteIdString) handleDelete(deleteIdString);
+                  const deleteId = safeId(record.feed_id || record._id, '');
+                  if (deleteId) handleDelete(deleteId);
                 }} variant="danger" size="small">
                   Delete
                 </Button>
@@ -224,7 +208,7 @@ const Feeding = () => {
               <label>Flock/Batch *</label>
               <select
                 name="batch_id"
-                value={formData.batch_id ? (typeof formData.batch_id === 'object' ? String(formData.batch_id._id || formData.batch_id.batch_id || formData.batch_id) : String(formData.batch_id)) : ''}
+                value={safeId(formData.batch_id, '')}
                 onChange={handleInputChange}
                 className="input-field"
                 required
