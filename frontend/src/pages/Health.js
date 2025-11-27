@@ -34,10 +34,16 @@ const Health = () => {
         healthService.getHealth(),
         flockService.getFlocks()
       ]);
-      setRecords(healthRes.data || []);
-      setFlocks(flocksRes.data || []);
+      // Handle response structure: healthRes is { success, data } from service
+      const records = healthRes?.data || healthRes || [];
+      setRecords(Array.isArray(records) ? records : []);
+      const flocks = flocksRes?.data || flocksRes || [];
+      setFlocks(Array.isArray(flocks) ? flocks : []);
     } catch (error) {
+      console.error('Error fetching health data:', error);
       toast.error('Failed to fetch data');
+      setRecords([]);
+      setFlocks([]);
     } finally {
       setLoading(false);
     }
@@ -51,7 +57,7 @@ const Health = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        await healthService.updateHealth(editingRecord.health_id, formData);
+        await healthService.updateHealth(editingRecord.health_id || editingRecord._id, formData);
         toast.success('Health record updated successfully');
       } else {
         await healthService.createHealth(formData);
@@ -66,8 +72,16 @@ const Health = () => {
 
   const handleEdit = (record) => {
     setEditingRecord(record);
+    // Handle populated batch_id (could be object or string)
+    let batchId = record.batch_id;
+    if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+      batchId = record.batch_id._id || record.batch_id.batch_id || record.batch_id;
+    }
+    // Convert to string if it's an ObjectId
+    batchId = batchId?.toString ? batchId.toString() : batchId;
+    
     setFormData({
-      batch_id: record.batch_id,
+      batch_id: batchId || '',
       vaccination_date: record.vaccination_date ? new Date(record.vaccination_date).toISOString().split('T')[0] : '',
       vaccine_name: record.vaccine_name || '',
       disease: record.disease || '',
@@ -126,10 +140,25 @@ const Health = () => {
         </div>
 
         <div className="flocks-grid">
-          {records.map((record) => (
-            <Card key={record.health_id} className="flock-card">
+          {records.map((record) => {
+            // Handle populated batch_id (could be object or string)
+            let batchId = record.batch_id;
+            let batchDisplay = 'N/A';
+            
+            if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+              batchId = record.batch_id._id || record.batch_id.batch_id || record.batch_id;
+              batchDisplay = record.batch_id.batch_id || record.batch_id._id || 'N/A';
+            } else {
+              batchDisplay = batchId;
+            }
+            
+            // Convert to string for display
+            batchDisplay = batchDisplay?.toString ? batchDisplay.toString() : batchDisplay;
+            
+            return (
+            <Card key={record.health_id || record._id} className="flock-card">
               <div className="flock-header">
-                <h3>Batch #{record.batch_id}</h3>
+                <h3>Batch #{batchDisplay}</h3>
                 <span className={`status-badge status-${record.status?.toLowerCase().replace(' ', '-') || 'healthy'}`}>
                   {record.status}
                 </span>
@@ -164,12 +193,13 @@ const Health = () => {
                 <Button onClick={() => handleEdit(record)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(record.health_id)} variant="danger" size="small">
+                <Button onClick={() => handleDelete(record.health_id || record._id)} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
 
         {records.length === 0 && (
