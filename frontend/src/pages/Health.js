@@ -57,7 +57,13 @@ const Health = () => {
     e.preventDefault();
     try {
       if (editingRecord) {
-        await healthService.updateHealth(editingRecord.health_id || editingRecord._id, formData);
+        const updateId = editingRecord.health_id || editingRecord._id;
+        const updateIdString = updateId ? (typeof updateId === 'object' ? String(updateId._id || updateId) : String(updateId)) : '';
+        if (!updateIdString) {
+          toast.error('Unable to identify record to update');
+          return;
+        }
+        await healthService.updateHealth(updateIdString, formData);
         toast.success('Health record updated successfully');
       } else {
         await healthService.createHealth(formData);
@@ -73,15 +79,17 @@ const Health = () => {
   const handleEdit = (record) => {
     setEditingRecord(record);
     // Handle populated batch_id (could be object or string)
-    let batchId = record.batch_id;
-    if (typeof record.batch_id === 'object' && record.batch_id !== null) {
-      batchId = record.batch_id._id || record.batch_id.batch_id || record.batch_id;
+    let batchId = '';
+    if (record.batch_id) {
+      if (typeof record.batch_id === 'object' && record.batch_id !== null) {
+        batchId = String(record.batch_id._id || record.batch_id.batch_id || '');
+      } else {
+        batchId = String(record.batch_id);
+      }
     }
-    // Convert to string if it's an ObjectId
-    batchId = batchId?.toString ? batchId.toString() : batchId;
     
     setFormData({
-      batch_id: batchId || '',
+      batch_id: batchId,
       vaccination_date: record.vaccination_date ? new Date(record.vaccination_date).toISOString().split('T')[0] : '',
       vaccine_name: record.vaccine_name || '',
       disease: record.disease || '',
@@ -146,17 +154,31 @@ const Health = () => {
             let batchDisplay = 'N/A';
             
             if (typeof record.batch_id === 'object' && record.batch_id !== null) {
-              batchId = record.batch_id._id || record.batch_id.batch_id || record.batch_id;
-              batchDisplay = record.batch_id.batch_id || record.batch_id._id || 'N/A';
-            } else {
-              batchDisplay = batchId;
+              // Extract the ID from populated object
+              batchId = record.batch_id._id || record.batch_id.batch_id || null;
+              // For display, try to get batch_id field first, then _id, or use breed info
+              if (record.batch_id.batch_id) {
+                batchDisplay = String(record.batch_id.batch_id);
+              } else if (record.batch_id._id) {
+                batchDisplay = String(record.batch_id._id);
+              } else if (record.batch_id.breed) {
+                batchDisplay = record.batch_id.breed;
+              } else {
+                batchDisplay = 'N/A';
+              }
+            } else if (record.batch_id) {
+              batchDisplay = String(record.batch_id);
             }
             
-            // Convert to string for display
-            batchDisplay = batchDisplay?.toString ? batchDisplay.toString() : batchDisplay;
+            // Ensure batchDisplay is always a string
+            batchDisplay = batchDisplay ? String(batchDisplay) : 'N/A';
+            
+            // Ensure key is always a string
+            const recordKey = record.health_id || record._id;
+            const recordKeyString = recordKey ? (typeof recordKey === 'object' ? String(recordKey._id || recordKey) : String(recordKey)) : Math.random().toString();
             
             return (
-            <Card key={record.health_id || record._id} className="flock-card">
+            <Card key={recordKeyString} className="flock-card">
               <div className="flock-header">
                 <h3>Batch #{batchDisplay}</h3>
                 <span className={`status-badge status-${record.status?.toLowerCase().replace(' ', '-') || 'healthy'}`}>
@@ -193,7 +215,11 @@ const Health = () => {
                 <Button onClick={() => handleEdit(record)} variant="info" size="small">
                   Edit
                 </Button>
-                <Button onClick={() => handleDelete(record.health_id || record._id)} variant="danger" size="small">
+                <Button onClick={() => {
+                  const deleteId = record.health_id || record._id;
+                  const deleteIdString = deleteId ? (typeof deleteId === 'object' ? String(deleteId._id || deleteId) : String(deleteId)) : '';
+                  if (deleteIdString) handleDelete(deleteIdString);
+                }} variant="danger" size="small">
                   Delete
                 </Button>
               </div>
@@ -219,17 +245,25 @@ const Health = () => {
               <label>Flock/Batch *</label>
               <select
                 name="batch_id"
-                value={formData.batch_id}
+                value={formData.batch_id ? (typeof formData.batch_id === 'object' ? String(formData.batch_id._id || formData.batch_id.batch_id || formData.batch_id) : String(formData.batch_id)) : ''}
                 onChange={handleInputChange}
                 className="input-field"
                 required
               >
                 <option value="">Select Flock</option>
-                {flocks.map(flock => (
-                  <option key={flock.batch_id} value={flock.batch_id}>
-                    {flock.breed} - {flock.quantity} birds
-                  </option>
-                ))}
+                {flocks.map(flock => {
+                  // Ensure batch_id is always a string
+                  const flockBatchId = flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
+                  const flockKey = flockBatchId || (flock._id ? String(flock._id) : Math.random().toString());
+                  const breedDisplay = flock.breed ? String(flock.breed) : 'Unknown';
+                  const quantityDisplay = flock.quantity ? String(flock.quantity) : '0';
+                  
+                  return (
+                    <option key={flockKey} value={flockBatchId}>
+                      {breedDisplay} - {quantityDisplay} birds
+                    </option>
+                  );
+                })}
               </select>
             </div>
             <Input
