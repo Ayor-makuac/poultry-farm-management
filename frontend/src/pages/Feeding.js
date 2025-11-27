@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { feedingService, flockService } from '../services';
 import Layout from '../components/layout/Layout';
@@ -120,6 +120,23 @@ const Feeding = () => {
     });
   };
 
+  // Pre-process active flocks to ensure they're always strings
+  const activeFlocks = useMemo(() => {
+    if (!Array.isArray(flocks)) return [];
+    return flocks
+      .filter(f => {
+        if (!f || typeof f !== 'object' || Array.isArray(f)) return false;
+        const statusStr = f.status ? String(f.status) : '';
+        return statusStr === 'Active';
+      })
+      .map(flock => ({
+        batch_id: flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '',
+        _id: flock._id ? String(flock._id) : '',
+        breed: flock.breed ? String(flock.breed) : 'Unknown',
+        quantity: flock.quantity ? String(flock.quantity) : '0'
+      }));
+  }, [flocks]);
+
   if (loading) {
     return (
       <Layout>
@@ -213,19 +230,11 @@ const Feeding = () => {
                 required
               >
                 <option value="">Select Flock</option>
-                {flocks.filter(f => {
-                  const statusStr = f?.status ? String(f.status) : '';
-                  return statusStr === 'Active';
-                }).map(flock => {
-                  // Ensure batch_id is always a string
-                  const flockBatchId = flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
-                  const flockKey = flockBatchId || (flock._id ? String(flock._id) : Math.random().toString());
-                  const breedDisplay = flock.breed ? String(flock.breed) : 'Unknown';
-                  const quantityDisplay = flock.quantity ? String(flock.quantity) : '0';
-                  
+                {activeFlocks.map((flock, index) => {
+                  const flockKey = flock.batch_id || flock._id || `flock-${index}`;
                   return (
-                    <option key={flockKey} value={flockBatchId}>
-                      {breedDisplay} - {quantityDisplay} birds
+                    <option key={flockKey} value={flock.batch_id}>
+                      {flock.breed} - {flock.quantity} birds
                     </option>
                   );
                 })}
