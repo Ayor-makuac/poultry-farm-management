@@ -34,8 +34,16 @@ const Production = () => {
       ]);
       const records = productionRes?.data || productionRes || [];
       setRecords(Array.isArray(records) ? records : []);
-      const flocks = flocksRes?.data || flocksRes || [];
-      setFlocks(Array.isArray(flocks) ? flocks : []);
+      
+      // Ensure flocks is an array and sanitize it
+      const flocksData = flocksRes?.data || flocksRes || [];
+      if (Array.isArray(flocksData)) {
+        // Filter out any invalid entries and ensure all are objects
+        const validFlocks = flocksData.filter(f => f && typeof f === 'object' && !Array.isArray(f));
+        setFlocks(validFlocks);
+      } else {
+        setFlocks([]);
+      }
     } catch (error) {
       console.error('Error fetching production data:', error);
       toast.error('Failed to fetch data');
@@ -223,24 +231,36 @@ const Production = () => {
                 required
               >
                 <option value="">Select Flock</option>
-                {Array.isArray(flocks) ? flocks.filter(f => {
-                  // Ensure status is a string before comparing
-                  if (!f || typeof f !== 'object') return false;
-                  const statusStr = f.status ? String(f.status) : '';
-                  return statusStr === 'Active';
-                }).map((flock, index) => {
-                  // Ensure batch_id is always a string
-                  const flockBatchId = flock && flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
-                  const flockKey = flockBatchId || (flock && flock._id ? String(flock._id) : `flock-${index}`);
-                  const breedDisplay = flock && flock.breed ? String(flock.breed) : 'Unknown';
-                  const quantityDisplay = flock && flock.quantity ? String(flock.quantity) : '0';
-                  
-                  return (
-                    <option key={flockKey} value={flockBatchId}>
-                      {breedDisplay} - {quantityDisplay} birds
-                    </option>
-                  );
-                }) : []}
+                {Array.isArray(flocks) && flocks.length > 0 ? flocks
+                  .filter(f => {
+                    // Ensure status is a string before comparing
+                    if (!f || typeof f !== 'object' || Array.isArray(f)) return false;
+                    try {
+                      const statusStr = f.status ? String(f.status) : '';
+                      return statusStr === 'Active';
+                    } catch (e) {
+                      return false;
+                    }
+                  })
+                  .map((flock, index) => {
+                    try {
+                      // Ensure batch_id is always a string
+                      const flockBatchId = flock && flock.batch_id ? (typeof flock.batch_id === 'object' ? String(flock.batch_id._id || flock.batch_id.batch_id || flock.batch_id) : String(flock.batch_id)) : '';
+                      const flockKey = flockBatchId || (flock && flock._id ? String(flock._id) : `flock-${index}`);
+                      const breedDisplay = flock && flock.breed ? String(flock.breed) : 'Unknown';
+                      const quantityDisplay = flock && flock.quantity ? String(flock.quantity) : '0';
+                      
+                      return (
+                        <option key={flockKey} value={flockBatchId}>
+                          {breedDisplay} - {quantityDisplay} birds
+                        </option>
+                      );
+                    } catch (e) {
+                      console.error('Error rendering flock option:', e);
+                      return null;
+                    }
+                  })
+                  .filter(Boolean) : null}
               </select>
             </div>
             <Input
