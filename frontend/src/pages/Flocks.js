@@ -75,13 +75,21 @@ const Flocks = () => {
 
   const handleEdit = (flock) => {
     setEditingFlock(flock);
+    // Ensure all values are strings
+    const breedValue = flock.breed ? String(flock.breed) : '';
+    const quantityValue = flock.quantity ? String(flock.quantity) : '';
+    const ageValue = flock.age ? String(flock.age) : '';
+    const dateValue = flock.date_acquired ? (typeof flock.date_acquired === 'string' ? flock.date_acquired : new Date(flock.date_acquired).toISOString().split('T')[0]) : '';
+    const housingValue = flock.housing_unit ? String(flock.housing_unit) : '';
+    const statusValue = flock.status ? String(flock.status) : 'Active';
+    
     setFormData({
-      breed: flock.breed,
-      quantity: flock.quantity,
-      age: flock.age,
-      date_acquired: flock.date_acquired,
-      housing_unit: flock.housing_unit || '',
-      status: flock.status
+      breed: breedValue,
+      quantity: quantityValue,
+      age: ageValue,
+      date_acquired: dateValue,
+      housing_unit: housingValue,
+      status: statusValue
     });
     setShowModal(true);
   };
@@ -114,11 +122,16 @@ const Flocks = () => {
   // Filter and search logic
   const filteredFlocks = useMemo(() => {
     return flocks.filter(flock => {
-      const matchesSearch = 
-        flock.breed?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        flock.housing_unit?.toLowerCase().includes(searchTerm.toLowerCase());
+      // Ensure we're comparing strings
+      const breedStr = flock.breed ? String(flock.breed) : '';
+      const housingStr = flock.housing_unit ? String(flock.housing_unit) : '';
+      const statusStr = flock.status ? String(flock.status) : '';
       
-      const matchesStatus = statusFilter === 'All' || flock.status === statusFilter;
+      const matchesSearch = 
+        breedStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        housingStr.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'All' || statusStr === statusFilter;
       
       return matchesSearch && matchesStatus;
     });
@@ -181,30 +194,38 @@ const Flocks = () => {
             const flockKey = flock.batch_id || flock._id;
             const flockKeyString = flockKey ? (typeof flockKey === 'object' ? String(flockKey._id || flockKey.batch_id || flockKey) : String(flockKey)) : Math.random().toString();
             
+            // Ensure all properties are strings/numbers before rendering
+            const breedDisplay = flock.breed ? String(flock.breed) : 'Unknown';
+            const statusDisplay = flock.status ? String(flock.status) : 'Unknown';
+            const quantityDisplay = flock.quantity ? String(flock.quantity) : '0';
+            const ageDisplay = flock.age ? String(flock.age) : '0';
+            const housingDisplay = flock.housing_unit ? String(flock.housing_unit) : 'N/A';
+            const dateDisplay = flock.date_acquired ? new Date(flock.date_acquired).toLocaleDateString() : 'N/A';
+            
             return (
             <Card key={flockKeyString} className="flock-card">
               <div className="flock-header">
-                <h3>{flock.breed}</h3>
-                <span className={`status-badge status-${flock.status.toLowerCase()}`}>
-                  {flock.status}
+                <h3>{breedDisplay}</h3>
+                <span className={`status-badge status-${statusDisplay.toLowerCase()}`}>
+                  {statusDisplay}
                 </span>
               </div>
               <div className="flock-details">
                 <div className="detail-row">
                   <span className="label">Quantity:</span>
-                  <span className="value">{flock.quantity} birds</span>
+                  <span className="value">{quantityDisplay} birds</span>
                 </div>
                 <div className="detail-row">
                   <span className="label">Age:</span>
-                  <span className="value">{flock.age} weeks</span>
+                  <span className="value">{ageDisplay} weeks</span>
                 </div>
                 <div className="detail-row">
                   <span className="label">Housing:</span>
-                  <span className="value">{flock.housing_unit || 'N/A'}</span>
+                  <span className="value">{housingDisplay}</span>
                 </div>
                 <div className="detail-row">
                   <span className="label">Acquired:</span>
-                  <span className="value">{new Date(flock.date_acquired).toLocaleDateString()}</span>
+                  <span className="value">{dateDisplay}</span>
                 </div>
               </div>
               <div className="flock-actions">
@@ -246,7 +267,7 @@ const Flocks = () => {
         <Modal
           isOpen={showModal}
           onClose={closeModal}
-          title={editingFlock ? 'Edit Flock' : 'Add New Flock'}
+          title={editingFlock ? String('Edit Flock') : String('Add New Flock')}
         >
           <form onSubmit={handleSubmit} className="modal-form">
                 <Input
